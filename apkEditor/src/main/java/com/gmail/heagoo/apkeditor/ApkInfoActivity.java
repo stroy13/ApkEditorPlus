@@ -3384,13 +3384,21 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                                 trace.stringStart(item.value.length(), 0);
                                 throw new com.gmail.heagoo.apkeditor.translate.TranslationRejectedException(prior, "Previously rejected");
                             }
-                            String translated = translationCache.get(cacheKey);
-                            if (translated == null) {
-                                translated = engine.translate(item.value, targetLanguage, sourceQualifier, item.name);
-                                translationCache.put(cacheKey, translated);
-                            } else {
+                            String translated = com.gmail.heagoo.apkeditor.translate.AndroidUiTranslations.find(
+                                    googleSource, googleTarget, item.name, item.value);
+                            if (translated != null) {
                                 trace.stringStart(item.value.length(), 0);
-                                trace.translationCacheHit();
+                                trace.stage(com.gmail.heagoo.apkeditor.translate.TranslationTrace.Stage.VALIDATE);
+                                translated = com.gmail.heagoo.apkeditor.translate.TranslationOutput.clean(item.value, translated);
+                            } else {
+                                translated = translationCache.get(cacheKey);
+                                if (translated == null) {
+                                    translated = engine.translate(item.value, targetLanguage, sourceQualifier, item.name);
+                                    translationCache.put(cacheKey, translated);
+                                } else {
+                                    trace.stringStart(item.value.length(), 0);
+                                    trace.translationCacheHit();
+                                }
                             }
                             translatedValues.put(item.name, translated);
                             result.add(new StringItem(item.name, translated));

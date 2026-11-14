@@ -26,3 +26,7 @@ you distribute.
 
 Research, interoperability and modding of the application by its owner. Do not redistribute
 the resulting APK if you have no rights to the original application. No warranty of any kind.
+
+## AndroidX AppCompat translation excerpts
+
+`AndroidUiTranslations.java` contains Russian translations adapted from AndroidX AppCompat (The Android Open Source Project), Apache License 2.0. Upstream: https://github.com/androidx/androidx/tree/androidx-main/appcompat/appcompat/src/main/res . A copy of the license is bundled at `apkEditorPlus/src/main/assets/licenses/androidx-apache-2.0.txt`.
