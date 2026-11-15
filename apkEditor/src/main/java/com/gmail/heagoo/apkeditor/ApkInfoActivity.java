@@ -3386,18 +3386,13 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             ArrayList<StringItem> result = new ArrayList<>();
             // Resource key is part of the prompt, so different keys may have different meanings.
             java.util.Map<String, String> translationCache = new java.util.HashMap<>();
+            java.util.Map<String, String> repeatedSentenceCache = new java.util.HashMap<>();
             java.util.Map<String, String> translatedValues = new java.util.LinkedHashMap<>();
             ArrayList<String> rejectedNames = new ArrayList<>();
             java.util.Map<String, com.gmail.heagoo.apkeditor.translate.TranslationRejectedException.Reason> rejectedCache = new java.util.HashMap<>();
             String failure = null;
-            try (com.gmail.heagoo.apkeditor.translate.TranslationSession engine = liteRtEngine
-                    ? new com.gmail.heagoo.apkeditor.translate.LiteRtLmInference(
-                            com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.selected(getApplicationContext()), trace, cancelled)
-                    : foxletEngine
-                            ? new com.gmail.heagoo.apkeditor.translate.FoxletInference(getApplicationContext(), foxletTag(googleSource), foxletTag(googleTarget), trace, cancelled)
-                            : new com.gmail.heagoo.apkeditor.translate.GoogleMlInference(googleSource, googleTarget, trace, cancelled)) {
-                localEngine.set(engine);
-                if (cancelled.get()) engine.requestCancel();
+            com.gmail.heagoo.apkeditor.translate.TranslationSession engine = null;
+            try {
                 for (int index = 0; index < snapshot.size(); index++) {
                     if (cancelled.get()) break;
                     StringItem item = snapshot.get(index);
@@ -3433,9 +3428,23 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                             }
                             if (translated == null) {
                                 translated = translationCache.get(cacheKey);
+                                boolean reusableSentence = item.value.length() >= 48 && item.value.indexOf('%') < 0
+                                        && item.value.indexOf('<') < 0 && item.value.indexOf((char) 92) < 0;
+                                if (translated == null && reusableSentence) translated = repeatedSentenceCache.get(item.value);
                                 if (translated == null) {
+                                    if (engine == null) {
+                                        engine = liteRtEngine
+                                                ? new com.gmail.heagoo.apkeditor.translate.LiteRtLmInference(
+                                                        com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.selected(getApplicationContext()), trace, cancelled)
+                                                : foxletEngine
+                                                        ? new com.gmail.heagoo.apkeditor.translate.FoxletInference(getApplicationContext(), foxletTag(googleSource), foxletTag(googleTarget), trace, cancelled)
+                                                        : new com.gmail.heagoo.apkeditor.translate.GoogleMlInference(googleSource, googleTarget, trace, cancelled);
+                                        localEngine.set(engine);
+                                        if (cancelled.get()) engine.requestCancel();
+                                    }
                                     translated = engine.translate(item.value, targetLanguage, sourceQualifier, item.name);
                                     translationCache.put(cacheKey, translated);
+                                    if (reusableSentence) repeatedSentenceCache.put(item.value, translated);
                                 } else {
                                     trace.stringStart(item.value.length(), 0);
                                     trace.translationCacheHit();
@@ -3458,6 +3467,12 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                 trace.failure(e instanceof java.io.IOException, e instanceof LinkageError);
                 failure = e.getMessage() == null ? e.toString() : e.getMessage();
             } finally {
+                if (engine != null) {
+                    try { engine.close(); }
+                    catch (Exception | LinkageError closeError) {
+                        if (failure == null) failure = closeError.getMessage() == null ? closeError.toString() : closeError.getMessage();
+                    }
+                }
                 localEngine.set(null);
                 if (failure == null) trace.stage(com.gmail.heagoo.apkeditor.translate.TranslationTrace.Stage.FINISHED);
                 diagnostics.save();

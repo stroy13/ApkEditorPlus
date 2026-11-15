@@ -43,23 +43,23 @@ class LiteRtLmInference(
             }
         }
         trace.runtimeBackend(selectedBackend)
-        trace.engineInfo("LiteRT-LM backend=$selectedBackend max_output_tokens=48")
+        trace.engineInfo("LiteRT-LM backend=$selectedBackend max_output_tokens=40")
         trace.stage(TranslationTrace.Stage.MODEL_READY)
     }
 
     override fun translate(value: String, language: String, sourceQualifier: String, resourceName: String): String {
         if (cancelled.get()) throw IOException("Translation cancelled")
-        trace.stringStart(value.length, 48)
+        trace.stringStart(value.length, 40)
         val sourceCode = ResourceLanguageTag.languageOnlyFromQualifier(sourceQualifier)
         val sourceLanguage = sourceCode?.let {
             java.util.Locale.forLanguageTag(it).getDisplayLanguage(java.util.Locale.ENGLISH)
         } ?: "the source language inferred from the text"
-        val prompt = """Translate this Android UI string from $sourceLanguage into natural $language. Use concise wording a native speaker would use. Keep placeholders, markup, escapes, product names and keyboard shortcuts unchanged. Output only the translation, never instructions or explanations.
-Resource: $resourceName
+        val prompt = """Translate from $sourceLanguage into natural, concise $language UI text. Prefer wording a native app would use; do not translate literally. Preserve placeholders, tags, escapes and product names exactly. The key is context only. Return only the translated text.
+Key: $resourceName
 $value""".trimIndent()
         val conversationConfig = ConversationConfig(
-            samplerConfig = SamplerConfig(topK = 32, topP = 0.9, temperature = 0.25),
-            maxOutputToken = 48
+            samplerConfig = SamplerConfig(topK = 20, topP = 0.92, temperature = 0.32),
+            maxOutputToken = 40
         )
         val first = generate(prompt, conversationConfig)
         if (cancelled.get()) throw IOException("Translation cancelled")
