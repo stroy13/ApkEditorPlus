@@ -161,6 +161,12 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
             generatePublicXml(resDir);
         }
         timer.lastTime("Value Decode Time");
+        if (!this.stopRunning) {
+            // DEX files are required for editing even when protected APKs use
+            // the lightweight resource-decoding path (where other raw files are
+            // intentionally omitted).
+            decodeDexFiles(apkFile, outDir);
+        }
         if (this.isFullDecoding) {
             progress(4);
             if (!this.stopRunning) {
@@ -217,14 +223,21 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
             if (in.containsDir("kotlin")) {
                 in.copyToDir(outDir, "kotlin");
             }
-            Set<String> files = in.getFiles(false);
-            for (String file : files) {
-                if (file.endsWith(".dex")) {
+        } catch (DirectoryException ex) {
+            throw new AndrolibException(ex);
+        }
+    }
+
+    private void decodeDexFiles(ExtFile apkFile, File outDir) throws AndrolibException {
+        try {
+            Directory in = apkFile.getDirectory();
+            for (String file : in.getFiles(false)) {
+                if (file.matches("classes([2-9]|[1-9][0-9]+)?\\.dex")) {
                     in.copyToDir(outDir, file);
                 }
             }
         } catch (DirectoryException ex) {
-            throw new AndrolibException(ex);
+            throw new AndrolibException("Could not copy DEX files", ex);
         }
     }
 
