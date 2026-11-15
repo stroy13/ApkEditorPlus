@@ -23,6 +23,18 @@ public class TranslationOutputTest {
         try { TranslationOutput.clean("<think> hi </think>", "<think> hi </think>"); fail(); }
         catch (IOException expected) { }
     }
+    @Test public void rejectsInvisibleOnlyModelOutput() {
+        String invisible = new String(new char[]{(char) 0x200B, (char) 0x2060});
+        try { TranslationOutput.clean("Navigate up", invisible); fail(); }
+        catch (TranslationRejectedException expected) { assertEquals(TranslationRejectedException.Reason.EMPTY, expected.reason()); }
+        catch (IOException unexpected) { fail(unexpected.toString()); }
+        assertFalse(TranslationOutput.hasVisibleContent(invisible));
+        assertTrue(TranslationOutput.hasVisibleContent("Готово"));
+    }
+    @Test public void recognizesCyrillicOutput() {
+        assertTrue(TranslationOutput.containsCyrillic("Перейти вверх"));
+        assertFalse(TranslationOutput.containsCyrillic("Navigate up"));
+    }
     @Test public void reportsSafeReasonForRejectedTranslations() {
         try { TranslationOutput.clean("Hello %s", "Hello"); fail(); }
         catch (TranslationRejectedException expected) { assertEquals(TranslationRejectedException.Reason.PLACEHOLDER, expected.reason()); }

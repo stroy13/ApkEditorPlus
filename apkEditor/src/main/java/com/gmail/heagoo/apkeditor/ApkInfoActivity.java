@@ -3324,6 +3324,10 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         }
         final String targetLanguage = language;
         final String sourceQualifier = localTranslationSource;
+        final String sourceLanguageCode = liteRtEngine
+                ? com.gmail.heagoo.apkeditor.translate.ResourceLanguageTag.languageOnlyFromQualifier(sourceQualifier) : googleSource;
+        final String targetLanguageCode = liteRtEngine
+                ? com.gmail.heagoo.apkeditor.translate.ResourceLanguageTag.languageOnlyFromQualifier(qualifier) : googleTarget;
         com.gmail.heagoo.apkeditor.translate.TranslationTrace trace = new com.gmail.heagoo.apkeditor.translate.TranslationTrace(
                 snapshot.size(), 0, 0, sample, qualifier);
         String diagnosticSource = liteRtEngine ? localSourceName(sourceQualifier) : googleSource;
@@ -3404,7 +3408,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                                 throw new com.gmail.heagoo.apkeditor.translate.TranslationRejectedException(prior, "Previously rejected");
                             }
                             String translated = com.gmail.heagoo.apkeditor.translate.TranslationMemory.find(
-                                    this, googleSource, googleTarget, item.value);
+                                    this, sourceLanguageCode, targetLanguageCode, item.value);
                             if (translated != null) {
                                 trace.stringStart(item.value.length(), 0);
                                 trace.translationCacheHit();
@@ -3412,7 +3416,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                                 translated = com.gmail.heagoo.apkeditor.translate.TranslationOutput.clean(item.value, translated);
                             } else {
                                 translated = com.gmail.heagoo.apkeditor.translate.AndroidUiTranslations.find(
-                                        googleSource, googleTarget, item.name, item.value);
+                                        sourceLanguageCode, targetLanguageCode, item.name, item.value);
                                 if (translated != null) {
                                     trace.stringStart(item.value.length(), 0);
                                     trace.stage(com.gmail.heagoo.apkeditor.translate.TranslationTrace.Stage.VALIDATE);
@@ -3468,11 +3472,11 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                                 new AlertDialog.Builder(this).setMessage(R.string.ai_replace_confirm)
                                         .setNegativeButton(android.R.string.cancel, null)
                                         .setPositiveButton(R.string.ai_replace, (confirm, ignored) -> {
-                                            try { updateExistingTranslation(qualifier, translatedValues); rememberReviewedTranslations(snapshot, machineTranslations, translatedValues, googleSource, googleTarget); closeReview.run(); Toast.makeText(this, R.string.ai_saved, Toast.LENGTH_LONG).show(); }
+                                            try { updateExistingTranslation(qualifier, translatedValues); rememberReviewedTranslations(snapshot, machineTranslations, translatedValues, sourceLanguageCode, targetLanguageCode); closeReview.run(); Toast.makeText(this, R.string.ai_saved, Toast.LENGTH_LONG).show(); }
                                             catch (Exception e) { new AlertDialog.Builder(this).setMessage(e.toString()).setPositiveButton(android.R.string.ok, null).show(); }
                                         }).show();
                             } else {
-                                try { saveTranslatedLanguage(qualifier, result); rememberReviewedTranslations(snapshot, machineTranslations, translatedValues, googleSource, googleTarget); closeReview.run(); Toast.makeText(this, R.string.ai_saved, Toast.LENGTH_LONG).show(); }
+                                try { saveTranslatedLanguage(qualifier, result); rememberReviewedTranslations(snapshot, machineTranslations, translatedValues, sourceLanguageCode, targetLanguageCode); closeReview.run(); Toast.makeText(this, R.string.ai_saved, Toast.LENGTH_LONG).show(); }
                                 catch (Exception e) { Toast.makeText(this, e.toString(), Toast.LENGTH_LONG).show(); }
                             }
                         });
