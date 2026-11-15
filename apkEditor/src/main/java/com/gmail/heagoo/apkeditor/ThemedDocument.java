@@ -57,6 +57,7 @@ final class ThemedDocument {
                     + ".hero{padding:22px;background:linear-gradient(145deg," + cssColor(background) + "," + cssColor(ThemeColors.color(context, R.attr.labSurface)) + ") !important;}"
                     + ".eyebrow{font-size:12px !important;letter-spacing:1px;color:" + cssColor(accent) + " !important;}"
                     + ".choice,.note{background-color:" + cssColor(ThemeColors.color(context, R.attr.labSurface)) + " !important;border-radius:12px;padding:12px 14px;margin:12px 0;}"
+                    + "figure{margin:14px 0;text-align:center;}figure img{display:block;width:100%;border-radius:14px;border:1px solid " + cssColor(accent) + "66;}figcaption{font-size:13px !important;opacity:.8;margin-top:7px;}"
                     + "footer{padding:8px 4px;opacity:.85;}"
                     + "body pre,body code,body pre *,body code *{font-family:monospace !important;white-space:pre-wrap !important;}"
                     + "img{max-width:100%;height:auto;}table{max-width:100%;}</style>";
