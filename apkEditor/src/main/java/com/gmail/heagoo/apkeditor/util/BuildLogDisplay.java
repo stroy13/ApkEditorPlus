@@ -26,8 +26,16 @@ public final class BuildLogDisplay {
         {"Merge ZIP engine: ", "Объединение ZIP: "},
         {"Signing key preference: ", "Ключ подписи: "},
         {"Source manifest: ", "Исходный манифест: "},
+        {"Effective replacement manifest: ", "Манифест для замены: "},
         {"Output manifest: ", "Итоговый манифест: "},
         {"Signing options: ", "Параметры подписи: "},
+        {"AAPT: undeclared app attributes ", "AAPT: найдены необъявленные атрибуты приложения "},
+        {"AAPT: older manifest validator rejected modern elements; retrying with validation warnings. Original error: ", "AAPT: повторяем проверку с совместимыми предупреждениями манифеста. Исходная ошибка: "},
+        {"SignHelper finished successfully", "Подпись APK успешно завершена"},
+        {"Android package parser OK: ", "Проверка APK пройдена: "},
+        {"Output rejected by Android package parser; removing unusable APK: ", "APK отклонён системой Android и будет удалён: "},
+        {"Temporary files cleaned", "Временные файлы удалены"},
+        {"Published target: ", "Готовый APK: "},
         {"Source: ", "Источник: "}, {"Target: ", "Результат: "},
         {"Stage: merge", "Этап: объединение"}, {"Stage: sign", "Этап: подпись"},
         {"Stage: verify", "Этап: проверка"}, {"Stage: publish", "Этап: сохранение"},
@@ -53,6 +61,12 @@ public final class BuildLogDisplay {
                 if (rest.startsWith("success")) rest = "успех" + rest.substring(7);
                 else if (rest.startsWith("failed")) rest = "ошибка" + rest.substring(6);
                 else if (rest.startsWith("cancelled")) rest = "отменено" + rest.substring(9);
+            } else if (pair[0].equals("Published target: ")) {
+                rest = localizePublishedTarget(rest);
+            } else if (pair[0].equals("Android package parser OK: ")) {
+                rest = localizePackageSummary(rest);
+            } else if (pair[0].equals("AAPT: undeclared app attributes ")) {
+                rest = rest.replace("; retrying with temporary declarations", "; повторяем сборку с временными объявлениями атрибутов");
             }
             return prefix + pair[1] + rest;
         }
@@ -102,6 +116,30 @@ public final class BuildLogDisplay {
         duration.appendTail(result);
         return header + result;
     }
+    private static String localizePublishedTarget(String value) {
+        java.util.regex.Matcher size = java.util.regex.Pattern.compile(" \\(([0-9]+) bytes\\)$").matcher(value);
+        if (!size.find()) return value;
+        try {
+            long count = Long.parseLong(size.group(1));
+            long lastTwo = count % 100;
+            long last = count % 10;
+            String unit = lastTwo >= 11 && lastTwo <= 14 ? "байт"
+                    : last == 1 ? "байт" : last >= 2 && last <= 4 ? "байта" : "байт";
+            return value.substring(0, size.start()) + " (" + count + " " + unit + ")";
+        } catch (NumberFormatException ignored) { return value; }
+    }
+
+    private static String localizePackageSummary(String value) {
+        String[][] fields = {
+                {"package=", "пакет="}, {"versionCode=", "код версии="}, {"versionName=", "версия="},
+                {"minSdk=", "мин. SDK="}, {"targetSdk=", "целевой SDK="}, {"application=", "приложение="},
+                {"components={", "компоненты={"}, {"activities=", "действия="}, {"services=", "службы="},
+                {"receivers=", "получатели="}, {"providers=", "провайдеры="}, {"permissions=", "разрешения="}
+        };
+        for (String[] field : fields) value = value.replace(field[0], field[1]);
+        return value;
+    }
+
     private static String stage(String name) {
         String[][] names = {{"resource change scan", "проверка изменений ресурсов"}, {"smali change scan", "проверка изменений smali"}, {"plan build", "планирование сборки"}, {"prepare and compile resources", "компоновка ресурсов"}, {"assemble ", "компиляция "}, {"merge APK", "объединение APK"}, {"sign and verify", "подпись и проверка"}, {"merge unsigned APK", "объединение неподписанного APK"}, {"normalize unsigned APK", "упаковка неподписанного APK"}, {"prepare original entries", "подготовка исходных файлов"}, {"cleanup", "очистка"}};
         for (String[] pair : names) if (name.startsWith(pair[0])) return pair[1] + name.substring(pair[0].length());

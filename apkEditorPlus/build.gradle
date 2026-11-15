@@ -8,8 +8,8 @@ android {
     ndkVersion "30.0.16248370"
 
     defaultConfig {
-        versionCode 250
-        versionName "1.10.0.250"
+        versionCode 251
+        versionName "1.10.0.251"
         applicationId "ru.apkeditor.plus"
         minSdk 26
         targetSdk 37

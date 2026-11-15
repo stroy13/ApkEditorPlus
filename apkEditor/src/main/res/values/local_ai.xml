@@ -50,7 +50,7 @@
     <string name="ai_replace">Replace</string>
     <string name="ai_pending_target">Save or resolve pending target-language edits before replacing translations.</string>
     <string name="ai_rejected_note">%1$d strings could not be safely translated. Existing translations are kept; new languages retain the source text. Resource names (first 20):</string>
-    <string name="ai_review_hint">All strings are shown below. Tap a row to edit it before saving. Styled strings and references remain unchanged.</string>
+    <string name="ai_review_hint">All strings are shown below. Tap a row to edit it before saving. Your corrections are stored privately on this device and reused for matching text and language pairs. Styled strings and references remain unchanged.</string>
     <string name="ai_review_source">Source: %1$s</string>
     <string name="ai_review_result">Result: %1$s</string>
     <string name="ai_review_rejected">Not translated — tap to correct; existing target will be kept otherwise</string>

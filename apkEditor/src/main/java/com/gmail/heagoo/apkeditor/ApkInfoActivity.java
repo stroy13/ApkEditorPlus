@@ -3384,13 +3384,23 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                                 trace.stringStart(item.value.length(), 0);
                                 throw new com.gmail.heagoo.apkeditor.translate.TranslationRejectedException(prior, "Previously rejected");
                             }
-                            String translated = com.gmail.heagoo.apkeditor.translate.AndroidUiTranslations.find(
-                                    googleSource, googleTarget, item.name, item.value);
+                            String translated = com.gmail.heagoo.apkeditor.translate.TranslationMemory.find(
+                                    this, googleSource, googleTarget, item.value);
                             if (translated != null) {
                                 trace.stringStart(item.value.length(), 0);
+                                trace.translationCacheHit();
                                 trace.stage(com.gmail.heagoo.apkeditor.translate.TranslationTrace.Stage.VALIDATE);
                                 translated = com.gmail.heagoo.apkeditor.translate.TranslationOutput.clean(item.value, translated);
                             } else {
+                                translated = com.gmail.heagoo.apkeditor.translate.AndroidUiTranslations.find(
+                                        googleSource, googleTarget, item.name, item.value);
+                                if (translated != null) {
+                                    trace.stringStart(item.value.length(), 0);
+                                    trace.stage(com.gmail.heagoo.apkeditor.translate.TranslationTrace.Stage.VALIDATE);
+                                    translated = com.gmail.heagoo.apkeditor.translate.TranslationOutput.clean(item.value, translated);
+                                }
+                            }
+                            if (translated == null) {
                                 translated = translationCache.get(cacheKey);
                                 if (translated == null) {
                                     translated = engine.translate(item.value, targetLanguage, sourceQualifier, item.name);
@@ -3431,6 +3441,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                 if (error != null) { new AlertDialog.Builder(this).setTitle(R.string.ai_translate_title).setMessage(error)
                         .setNeutralButton(R.string.ai_copy_log, (d, w) -> diagnostics.copy(this))
                         .setPositiveButton(android.R.string.ok, null).show(); return; }
+                java.util.Map<String, String> machineTranslations = new java.util.HashMap<>(translatedValues);
                 TranslationReviewDialog.show(this, snapshot, result, translatedValues, rejectedNames, sample, googleEngine,
                         () -> diagnostics.copy(this), closeReview -> {
                             File targetDir = new File(decodeRootPath, "res/values" + qualifier);
@@ -3438,16 +3449,28 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                                 new AlertDialog.Builder(this).setMessage(R.string.ai_replace_confirm)
                                         .setNegativeButton(android.R.string.cancel, null)
                                         .setPositiveButton(R.string.ai_replace, (confirm, ignored) -> {
-                                            try { updateExistingTranslation(qualifier, translatedValues); closeReview.run(); Toast.makeText(this, R.string.ai_saved, Toast.LENGTH_LONG).show(); }
+                                            try { updateExistingTranslation(qualifier, translatedValues); rememberReviewedTranslations(snapshot, machineTranslations, translatedValues, googleSource, googleTarget); closeReview.run(); Toast.makeText(this, R.string.ai_saved, Toast.LENGTH_LONG).show(); }
                                             catch (Exception e) { new AlertDialog.Builder(this).setMessage(e.toString()).setPositiveButton(android.R.string.ok, null).show(); }
                                         }).show();
                             } else {
-                                try { saveTranslatedLanguage(qualifier, result); closeReview.run(); Toast.makeText(this, R.string.ai_saved, Toast.LENGTH_LONG).show(); }
+                                try { saveTranslatedLanguage(qualifier, result); rememberReviewedTranslations(snapshot, machineTranslations, translatedValues, googleSource, googleTarget); closeReview.run(); Toast.makeText(this, R.string.ai_saved, Toast.LENGTH_LONG).show(); }
                                 catch (Exception e) { Toast.makeText(this, e.toString(), Toast.LENGTH_LONG).show(); }
                             }
                         });
             });
         }, "local-ai-translate").start();
+    }
+
+    /** Keep only deliberate review edits as a local exact-match glossary for later translations. */
+    private void rememberReviewedTranslations(List<StringItem> source, Map<String, String> machine,
+                                             Map<String, String> reviewed, String sourceLanguage,
+                                             String targetLanguage) {
+        for (StringItem item : source) {
+            String value = reviewed.get(item.name);
+            if (value == null || value.equals(item.value) || value.equals(machine.get(item.name))) continue;
+            com.gmail.heagoo.apkeditor.translate.TranslationMemory.remember(
+                    getApplicationContext(), sourceLanguage, targetLanguage, item.value, value);
+        }
     }
 
     /** Update only translated scalar strings, leaving target-only and skipped resources intact. */
