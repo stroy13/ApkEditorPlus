@@ -112,6 +112,7 @@ $value""".trimIndent()
             when (Character.UnicodeScript.of(cp)) {
                 Character.UnicodeScript.LATIN -> latin++
                 Character.UnicodeScript.CYRILLIC -> cyrillic++
+                else -> Unit
             }
         }
         return latin > cyrillic
