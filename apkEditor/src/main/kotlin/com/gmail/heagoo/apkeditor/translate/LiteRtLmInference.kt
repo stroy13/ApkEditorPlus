@@ -41,8 +41,8 @@ Preserve every placeholder, escape, tag, and formatting token exactly. Keep prod
 Resource key: $resourceName
 Source: $value
 Translation:""".trimIndent()
-        val result = kotlinx.coroutines.runBlocking {
-            engine.createConversation().use { conversation -> conversation.sendMessage(prompt).text }
+        val result = kotlinx.coroutines.runBlocking<String> {
+            engine.createConversation().use { conversation -> conversation.sendMessage(prompt).toString() }
         }
         if (cancelled.get()) throw IOException("Translation cancelled")
         trace.stage(TranslationTrace.Stage.VALIDATE)
