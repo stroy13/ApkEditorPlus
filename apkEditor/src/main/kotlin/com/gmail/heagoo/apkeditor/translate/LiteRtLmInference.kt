@@ -54,14 +54,11 @@ class LiteRtLmInference(
         val sourceLanguage = sourceCode?.let {
             java.util.Locale.forLanguageTag(it).getDisplayLanguage(java.util.Locale.ENGLISH)
         } ?: "the source language inferred from the text"
-        val cyrillicTarget = language.equals("Russian", ignoreCase = true)
-        val languageRule = if (cyrillicTarget) "The result MUST be Russian written in Cyrillic; do not leave English UI words untranslated." else "Translate into the requested target language."
-        val prompt = """Translate Android UI text from $sourceLanguage to $language. $languageRule Return only a concise, natural translation. Preserve placeholders, tags, escapes and formatting exactly. Keep product names unchanged.
-Key: $resourceName
-Text: $value
-Translation:""".trimIndent()
+        val prompt = """Translate this Android UI string from $sourceLanguage into natural $language. Use concise wording a native speaker would use. Keep placeholders, markup, escapes, product names and keyboard shortcuts unchanged. Output only the translation, never instructions or explanations.
+Resource: $resourceName
+$value""".trimIndent()
         val conversationConfig = ConversationConfig(
-            samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),
+            samplerConfig = SamplerConfig(topK = 32, topP = 0.9, temperature = 0.25),
             maxOutputToken = 48
         )
         val first = generate(prompt, conversationConfig)
@@ -69,26 +66,56 @@ Translation:""".trimIndent()
         trace.stage(TranslationTrace.Stage.VALIDATE)
         try {
             val cleaned = TranslationOutput.clean(value, first)
-            if (requiresCyrillic(language, value) && !TranslationOutput.containsCyrillic(cleaned))
-                throw TranslationRejectedException(TranslationRejectedException.Reason.LANGUAGE, "Model did not return Russian text")
+            validateLanguage(language, value, resourceName, cleaned)
             return cleaned
         } catch (rejected: TranslationRejectedException) {
             if (rejected.reason() != TranslationRejectedException.Reason.EMPTY
                     && rejected.reason() != TranslationRejectedException.Reason.PLACEHOLDER
-                    && rejected.reason() != TranslationRejectedException.Reason.LANGUAGE) throw rejected
+                    && rejected.reason() != TranslationRejectedException.Reason.LANGUAGE
+                    && rejected.reason() != TranslationRejectedException.Reason.REASONING) throw rejected
+            // The tiny model's same-prompt retry is useful for malformed tokens but not for
+            // language failures; repeating it doubles latency without improving its capability.
+            if (rejected.reason() == TranslationRejectedException.Reason.LANGUAGE
+                    || rejected.reason() == TranslationRejectedException.Reason.REASONING) throw rejected
             if (cancelled.get()) throw IOException("Translation cancelled")
-            val retry = "$prompt\nThe previous answer was invalid. Translate the complete source now. Output visible translated text only, preserving every resource token exactly."
-            val second = generate(retry, conversationConfig)
+            // A fresh conversation with the exact same short prompt avoids exposing repair instructions
+            // in the returned resource string (small models often echo appended retry directions).
+            val second = generate(prompt, conversationConfig)
             if (cancelled.get()) throw IOException("Translation cancelled")
             val cleaned = TranslationOutput.clean(value, second)
-            if (requiresCyrillic(language, value) && !TranslationOutput.containsCyrillic(cleaned))
-                throw TranslationRejectedException(TranslationRejectedException.Reason.LANGUAGE, "Model did not return Russian text after retry")
+            validateLanguage(language, value, resourceName, cleaned)
             return cleaned
         }
     }
 
     private fun generate(prompt: String, config: ConversationConfig): String = kotlinx.coroutines.runBlocking {
         engine.createConversation(config).use { conversation -> conversation.sendMessage(prompt).toString() }
+    }
+
+    private fun validateLanguage(language: String, source: String, resourceName: String, output: String) {
+        if (!requiresCyrillic(language, source)) return
+        val lower = output.lowercase(java.util.Locale.ROOT)
+        if (!TranslationOutput.containsCyrillic(output)
+                || (!resourceName.isNullOrBlank() && lower.contains(resourceName.lowercase(java.util.Locale.ROOT)))
+                || mostlyLatin(output))
+            throw TranslationRejectedException(TranslationRejectedException.Reason.LANGUAGE, "Model output is not a clean Russian translation")
+    }
+
+    private fun mostlyLatin(text: String): Boolean {
+        var latin = 0
+        var cyrillic = 0
+        var i = 0
+        while (i < text.length) {
+            val cp = text.codePointAt(i)
+            i += Character.charCount(cp)
+            if (!Character.isLetter(cp)) continue
+            when (Character.UnicodeScript.of(cp)) {
+                Character.UnicodeScript.LATIN -> latin++
+                Character.UnicodeScript.CYRILLIC -> cyrillic++
+                else -> Unit
+            }
+        }
+        return latin > cyrillic
     }
 
     private fun requiresCyrillic(language: String, source: String): Boolean {

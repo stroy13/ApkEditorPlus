@@ -12,6 +12,11 @@ import org.junit.rules.TemporaryFolder;
 public class LocalModelStoreTest {
     @Rule public TemporaryFolder folder = new TemporaryFolder();
 
+    @Test public void largerGemmaCatalogUsesExpectedFourGigabyteClassModelSize() {
+        assertEquals(3659530240L, LocalLlmModelStore.GEMMA4_E4B_BYTES);
+        assertEquals(2588147712L, LocalLlmModelStore.GEMMA4_E2B_BYTES);
+    }
+
     @Test public void importsWithoutOverwriting() throws Exception {
         byte[] data = new byte[]{'G','G','U','F',3,0,0,0,1,2,3};
         java.io.File a = LocalModelStore.importModel(new ByteArrayInputStream(data), folder.getRoot());

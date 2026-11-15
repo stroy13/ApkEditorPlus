@@ -50,6 +50,11 @@ public final class TranslationOutput {
             text = text.substring(CLOSE.length()).trim();
         }
         if (text.isEmpty() || !hasVisibleContent(text)) throw new TranslationRejectedException(TranslationRejectedException.Reason.EMPTY, "Translation is empty or invisible");
+        String lower = text.toLowerCase(java.util.Locale.ROOT);
+        if (lower.matches("(?s)^(resource|translation|answer|text|ресурс|перевод|ответ)\\s*:.+")
+                || lower.contains("the previous answer was invalid") || lower.contains("output visible translated text only")
+                || lower.contains("translate the complete source now"))
+            throw new TranslationRejectedException(TranslationRejectedException.Reason.REASONING, "Model returned prompt instructions instead of a translation");
         if (text.contains(OPEN) || text.contains(CLOSE))
             throw new TranslationRejectedException(TranslationRejectedException.Reason.REASONING, "Unexpected or incomplete reasoning markers");
         if (!TranslationTokens.preserved(source, text))
