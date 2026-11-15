@@ -47,6 +47,18 @@ public class TranslationTraceTest {
         assertFalse(t.report().contains("prefill_ms=-1"));
         assertTrue(t.report().contains("prompt_tokens=55 generated_tokens=17 template_status=1"));
     }
+    @Test public void reportsAcceleratedRuntimeWithoutLeakingArbitraryText() {
+        TranslationTrace t = new TranslationTrace(1, 0, 0, false, "-ru");
+        t.runtimeBackend("GPU");
+        t.engineInfo("LiteRT-LM backend=GPU max_output_tokens=80");
+        assertTrue(t.report().contains("engine_backend=GPU"));
+        assertTrue(t.report().contains("engine_features=LiteRT-LM backend=GPU max_output_tokens=80"));
+        t.runtimeBackend("GPU\\nsecret");
+        t.engineInfo("/private/path");
+        assertTrue(t.report().contains("engine_backend=GPU"));
+        assertFalse(t.report().contains("secret"));
+        assertFalse(t.report().contains("/private/path"));
+    }
     @Test public void recordsTokenMetrics() {
         TranslationTrace t = new TranslationTrace(1, 1, 1, true, "-ru");
         t.nativeResult(12, 32, 100);

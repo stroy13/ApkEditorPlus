@@ -26,6 +26,9 @@ public final class TranslationTrace {
     private String engineInfo = "unavailable";
     private String backend = "unavailable";
     public synchronized void backend(boolean fast) { backend = fast ? "armv8.2-dotprod" : "baseline"; }
+    public synchronized void runtimeBackend(String value) {
+        if (value != null && value.matches("[A-Za-z0-9_.-]{1,32}")) backend = value;
+    }
     private long prefillStart, prefillMs = -1, generationStart, lastTokenAt;
     private long lastDecodeStart, lastDecodeMs = -1, maxDecodeMs = -1, totalDecodeMs;
     private int decodedTokens;
