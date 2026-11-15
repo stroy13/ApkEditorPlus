@@ -52,10 +52,11 @@ public class StringItem implements Serializable {
         StringBuilder sb = new StringBuilder();
         sb.append("<string name=\"");
         sb.append(name);
+        sb.append("\"");
         if (bAddFormat) {
             sb.append(" formatted=\"false\"");
         }
-        sb.append("\">");
+        sb.append(">");
         sb.append(txt);
         sb.append("</string>");
 
