@@ -358,13 +358,20 @@ public class AXmlResourceParser implements XmlResourceParser {
                     value = appNamespace;
                 }
             }
-            // Original logical from apktool
-            else if (m_strings.getString(name).length() == 0) {
-                value = android_ns;
+            // Original logical from apktool. Obfuscated manifests can contain
+            // invalid string-pool indices, so do not dereference a missing name.
+            else {
+                String attributeName = m_strings.getString(name);
+                if (attributeName != null && attributeName.length() == 0) {
+                    value = android_ns;
+                }
             }
         }
 
-        return value;
+        // Protected manifests may reference a namespace string that is absent from
+        // the string pool. XmlSerializer expects a non-null namespace; treat an
+        // unresolved namespace as unqualified rather than aborting manifest decode.
+        return value != null ? value : "";
     }
 
     private String getPossibleNamespace() {
