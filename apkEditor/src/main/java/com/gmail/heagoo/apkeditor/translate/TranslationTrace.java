@@ -36,7 +36,7 @@ public final class TranslationTrace {
     private int reusedPromptTokens;
     public synchronized void engineInfo(String info) {
         // System capabilities only; cap and filter the native library's text.
-        if (info != null && info.length() <= 2048 && info.matches("[A-Za-z0-9_ .:=|+/-]+")) engineInfo = info;
+        if (info != null && info.length() <= 2048 && info.matches("[A-Za-z0-9_ .:=|+-]+")) engineInfo = info;
     }
     private final int total;
     private final int threads;
