@@ -1266,6 +1266,10 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         ApkParseThread worker = this.parseThread;
         if (worker != null) {
             report.append(worker.getStageTimings()).append('\n');
+            String stackTrace = worker.getErrorStackTrace();
+            if (stackTrace != null && !stackTrace.isEmpty()) {
+                report.append("Exception stack trace:\n").append(stackTrace).append('\n');
+            }
         }
         if (worker != null && worker.isAlive()) {
             report.append("Thread: ").append(worker.getState()).append('\n');

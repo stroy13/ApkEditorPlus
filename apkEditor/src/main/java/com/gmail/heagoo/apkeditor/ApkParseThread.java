@@ -40,6 +40,7 @@ public class ApkParseThread extends Thread {
     private String decodeRootPath;
     private volatile ApkDecoderMine decoder;
     private String errMessage;
+    private volatile String errorStackTrace;
     private ResSmaliIdProvider idProvider;
     private boolean isFullDecoding;
     private boolean mApkProtected;
@@ -209,6 +210,7 @@ public class ApkParseThread extends Thread {
             // ...) used to escape and kill this thread silently, leaving the
             // loading screen hanging on the last progress label.
             Log.e("ApkParse", "APK decoding failed", t);
+            this.errorStackTrace = Log.getStackTraceString(t);
             if (this.errMessage == null) {
                 this.errMessage = t instanceof OutOfMemoryError
                         ? "OutOfMemoryError: insufficient memory while opening the APK"
@@ -372,11 +374,13 @@ public class ApkParseThread extends Thread {
                 return true;
             } catch (Exception e4) {
                 this.errMessage = e4.toString();
-                e4.printStackTrace();
+                this.errorStackTrace = Log.getStackTraceString(e4);
+                Log.e("ApkParse", "APK resource decode failed", e4);
                 return z;
             }
         } catch (Exception e5) {
             Log.e("ApkParse", "APK failed before resource decoding started", e5);
+            this.errorStackTrace = Log.getStackTraceString(e5);
             this.errMessage = e5.getMessage() != null ? e5.getMessage() : e5.toString();
             z = false;
         }
@@ -493,6 +497,10 @@ public class ApkParseThread extends Thread {
 
     public String getErrMessage() {
         return this.errMessage;
+    }
+
+    public String getErrorStackTrace() {
+        return this.errorStackTrace;
     }
 
     public String getResourceRootPath() {

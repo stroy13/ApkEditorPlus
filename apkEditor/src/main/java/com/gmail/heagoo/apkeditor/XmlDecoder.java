@@ -83,13 +83,13 @@ public class XmlDecoder implements ResStreamDecoder {
                         event(this.par, eventType);
                     }
                 } catch (Exception e) {
-                    throw new AndrolibException(e.getMessage());
+                    throw new AndrolibException(e.getMessage(), e);
                 }
             }
             this.ser.flush();
             return null;
         } catch (Exception e2) {
-            throw new AndrolibException(e2.getMessage());
+            throw new AndrolibException(e2.getMessage(), e2);
         }
     }
 
