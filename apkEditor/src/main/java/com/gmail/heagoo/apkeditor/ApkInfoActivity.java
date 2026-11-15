@@ -3328,8 +3328,13 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                 ? com.gmail.heagoo.apkeditor.translate.ResourceLanguageTag.languageOnlyFromQualifier(sourceQualifier) : googleSource;
         final String targetLanguageCode = liteRtEngine
                 ? com.gmail.heagoo.apkeditor.translate.ResourceLanguageTag.languageOnlyFromQualifier(qualifier) : googleTarget;
+        long selectedModelBytes = 0;
+        if (liteRtEngine) {
+            java.io.File selectedModel = com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.selected(getApplicationContext());
+            if (selectedModel != null) selectedModelBytes = selectedModel.length();
+        }
         com.gmail.heagoo.apkeditor.translate.TranslationTrace trace = new com.gmail.heagoo.apkeditor.translate.TranslationTrace(
-                snapshot.size(), 0, 0, sample, qualifier);
+                snapshot.size(), 0, selectedModelBytes, sample, qualifier);
         String diagnosticSource = liteRtEngine ? localSourceName(sourceQualifier) : googleSource;
         String diagnosticTarget = liteRtEngine ? targetLanguage : googleTarget;
         com.gmail.heagoo.apkeditor.translate.TranslationDiagnostics diagnostics = new com.gmail.heagoo.apkeditor.translate.TranslationDiagnostics(
@@ -3338,6 +3343,10 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         android.app.ProgressDialog progress = new android.app.ProgressDialog(this);
         progress.setTitle(googleEngine ? R.string.ai_google_action : liteRtEngine ? R.string.ai_litert_action : R.string.ai_foxlet_action);
         progress.setMessage(getString(R.string.ai_loading));
+        progress.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+        progress.setMax(snapshot.size());
+        progress.setProgress(0);
+        progress.setIndeterminate(false);
         progress.setCancelable(false);
         java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
         localTranslationCancellation = cancelled;
@@ -3346,15 +3355,14 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         long started = android.os.SystemClock.elapsedRealtime();
         android.os.Handler timer = new android.os.Handler(android.os.Looper.getMainLooper());
         Runnable update = new Runnable() {
-            int ticks;
             @Override public void run() {
                 if (isFinishing() || isDestroyed() || !progress.isShowing()) return;
                 if (cancelled.get()) progress.setMessage(getString(R.string.ai_translate_cancelling));
                 else if (currentName.get().isEmpty()) progress.setMessage(getString(R.string.ai_loading_elapsed,
                         (android.os.SystemClock.elapsedRealtime() - started) / 1000));
                 else progress.setMessage(getString(R.string.ai_progress_elapsed, completed.get(), snapshot.size(),
-                        currentName.get(), (android.os.SystemClock.elapsedRealtime() - started) / 1000) + "\n" + trace.nativeStatus());
-                if (++ticks % 5 == 0) diagnostics.save();
+                        currentName.get(), (android.os.SystemClock.elapsedRealtime() - started) / 1000));
+                progress.setProgress(completed.get());
                 timer.postDelayed(this, 1000);
             }
         };
@@ -3378,18 +3386,13 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             ArrayList<StringItem> result = new ArrayList<>();
             // Resource key is part of the prompt, so different keys may have different meanings.
             java.util.Map<String, String> translationCache = new java.util.HashMap<>();
+            java.util.Map<String, String> repeatedSentenceCache = new java.util.HashMap<>();
             java.util.Map<String, String> translatedValues = new java.util.LinkedHashMap<>();
             ArrayList<String> rejectedNames = new ArrayList<>();
             java.util.Map<String, com.gmail.heagoo.apkeditor.translate.TranslationRejectedException.Reason> rejectedCache = new java.util.HashMap<>();
             String failure = null;
-            try (com.gmail.heagoo.apkeditor.translate.TranslationSession engine = liteRtEngine
-                    ? new com.gmail.heagoo.apkeditor.translate.LiteRtLmInference(
-                            com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.selected(getApplicationContext()), trace, cancelled)
-                    : foxletEngine
-                            ? new com.gmail.heagoo.apkeditor.translate.FoxletInference(getApplicationContext(), foxletTag(googleSource), foxletTag(googleTarget), trace, cancelled)
-                            : new com.gmail.heagoo.apkeditor.translate.GoogleMlInference(googleSource, googleTarget, trace, cancelled)) {
-                localEngine.set(engine);
-                if (cancelled.get()) engine.requestCancel();
+            com.gmail.heagoo.apkeditor.translate.TranslationSession engine = null;
+            try {
                 for (int index = 0; index < snapshot.size(); index++) {
                     if (cancelled.get()) break;
                     StringItem item = snapshot.get(index);
@@ -3425,9 +3428,23 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                             }
                             if (translated == null) {
                                 translated = translationCache.get(cacheKey);
+                                boolean reusableSentence = item.value.length() >= 48 && item.value.indexOf('%') < 0
+                                        && item.value.indexOf('<') < 0 && item.value.indexOf((char) 92) < 0;
+                                if (translated == null && reusableSentence) translated = repeatedSentenceCache.get(item.value);
                                 if (translated == null) {
+                                    if (engine == null) {
+                                        engine = liteRtEngine
+                                                ? new com.gmail.heagoo.apkeditor.translate.LiteRtLmInference(
+                                                        com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.selected(getApplicationContext()), trace, cancelled)
+                                                : foxletEngine
+                                                        ? new com.gmail.heagoo.apkeditor.translate.FoxletInference(getApplicationContext(), foxletTag(googleSource), foxletTag(googleTarget), trace, cancelled)
+                                                        : new com.gmail.heagoo.apkeditor.translate.GoogleMlInference(googleSource, googleTarget, trace, cancelled);
+                                        localEngine.set(engine);
+                                        if (cancelled.get()) engine.requestCancel();
+                                    }
                                     translated = engine.translate(item.value, targetLanguage, sourceQualifier, item.name);
                                     translationCache.put(cacheKey, translated);
+                                    if (reusableSentence) repeatedSentenceCache.put(item.value, translated);
                                 } else {
                                     trace.stringStart(item.value.length(), 0);
                                     trace.translationCacheHit();
@@ -3450,6 +3467,12 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                 trace.failure(e instanceof java.io.IOException, e instanceof LinkageError);
                 failure = e.getMessage() == null ? e.toString() : e.getMessage();
             } finally {
+                if (engine != null) {
+                    try { engine.close(); }
+                    catch (Exception | LinkageError closeError) {
+                        if (failure == null) failure = closeError.getMessage() == null ? closeError.toString() : closeError.getMessage();
+                    }
+                }
                 localEngine.set(null);
                 if (failure == null) trace.stage(com.gmail.heagoo.apkeditor.translate.TranslationTrace.Stage.FINISHED);
                 diagnostics.save();

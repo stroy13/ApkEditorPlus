@@ -183,14 +183,39 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
 
     private void showLocalAiModelMenu() {
         new android.app.AlertDialog.Builder(this).setTitle(R.string.ai_models)
-                .setItems(new String[]{getString(R.string.ai_download), getString(R.string.ai_import)}, (dialog, which) -> {
+                .setItems(new String[]{getString(R.string.ai_download), getString(R.string.ai_download_stronger),
+                        getString(R.string.ai_download_4gb), getString(R.string.ai_import), getString(R.string.ai_select_model)}, (dialog, which) -> {
                     if (which == 0) confirmRecommendedModelDownload();
-                    else {
+                    else if (which == 1) confirmGemma4Download();
+                    else if (which == 2) confirmGemma4E4BDownload();
+                    else if (which == 3) {
                         Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                         pick.addCategory(Intent.CATEGORY_OPENABLE);
                         pick.setType("*/*");
                         startActivityForResult(pick, 9274);
-                    }
+                    } else chooseInstalledLocalModel();
+                }).setNegativeButton(android.R.string.cancel, null).show();
+    }
+
+    private void chooseInstalledLocalModel() {
+        java.io.File[] models = com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.available(this);
+        if (models.length == 0) {
+            android.widget.Toast.makeText(this, R.string.ai_no_installed_models, android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
+        String[] names = new String[models.length];
+        String selected = com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.selected(this) == null ? null
+                : com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.selected(this).getName();
+        int checked = -1;
+        for (int i = 0; i < models.length; i++) {
+            names[i] = models[i].getName() + " (" + android.text.format.Formatter.formatFileSize(this, models[i].length()) + ")";
+            if (models[i].getName().equals(selected)) checked = i;
+        }
+        new android.app.AlertDialog.Builder(this).setTitle(R.string.ai_select_model)
+                .setSingleChoiceItems(names, checked, (d, which) -> {
+                    boolean ok = com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.select(this, models[which].getName());
+                    if (ok) d.dismiss();
+                    else android.widget.Toast.makeText(this, R.string.ai_model_import_failed, android.widget.Toast.LENGTH_LONG).show();
                 }).setNegativeButton(android.R.string.cancel, null).show();
     }
 
@@ -203,15 +228,43 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
                     try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://ai.google.dev/gemma/terms"))); }
                     catch (Exception e) { android.widget.Toast.makeText(this, R.string.ai_model_import_failed, android.widget.Toast.LENGTH_LONG).show(); }
                 })
-                .setPositiveButton(R.string.ai_download, (d, w) -> downloadRecommendedModel())
+                .setPositiveButton(R.string.ai_download, (d, w) -> downloadLocalModel(0))
                 .create();
         dialog.show();
     }
 
-    private void downloadRecommendedModel() {
+    private void confirmGemma4Download() {
+        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.ai_gemma4_confirm_title)
+                .setMessage(R.string.ai_gemma4_confirm)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setNeutralButton(R.string.ai_license, (d, w) -> {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://ai.google.dev/gemma/terms"))); }
+                    catch (Exception e) { android.widget.Toast.makeText(this, R.string.ai_model_import_failed, android.widget.Toast.LENGTH_LONG).show(); }
+                })
+                .setPositiveButton(R.string.ai_download_stronger, (d, w) -> downloadLocalModel(1))
+                .create();
+        dialog.show();
+    }
+
+    private void confirmGemma4E4BDownload() {
+        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.ai_gemma4_e4b_confirm_title)
+                .setMessage(R.string.ai_gemma4_e4b_confirm)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setNeutralButton(R.string.ai_license, (d, w) -> {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://ai.google.dev/gemma/terms"))); }
+                    catch (Exception e) { android.widget.Toast.makeText(this, R.string.ai_model_import_failed, android.widget.Toast.LENGTH_LONG).show(); }
+                })
+                .setPositiveButton(R.string.ai_download_4gb, (d, w) -> downloadLocalModel(2))
+                .create();
+        dialog.show();
+    }
+
+    private void downloadLocalModel(int model) {
         java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
         android.app.ProgressDialog progress = new android.app.ProgressDialog(this);
-        progress.setTitle(R.string.ai_download);
+        progress.setTitle(model == 2 ? R.string.ai_download_4gb : model == 1 ? R.string.ai_download_stronger : R.string.ai_download);
         progress.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
         progress.setMax(1000);
         progress.setIndeterminate(false);
@@ -224,8 +277,7 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
         new Thread(() -> {
             boolean ok = false;
             try {
-                com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.downloadRecommended(getApplicationContext(),
-                        new com.gmail.heagoo.apkeditor.translate.LocalModelStore.Progress() {
+                com.gmail.heagoo.apkeditor.translate.LocalModelStore.Progress transfer = new com.gmail.heagoo.apkeditor.translate.LocalModelStore.Progress() {
                             private long total;
                             @Override public boolean isCancelled() { return cancelled.get(); }
                             @Override public void onTotal(long bytes) {
@@ -240,7 +292,10 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
                                             (int) (bytes / (1024 * 1024)), (int) (max / (1024 * 1024))));
                                 });
                             }
-                        });
+                        };
+                if (model == 2) com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.downloadGemma4E4B(getApplicationContext(), transfer);
+                else if (model == 1) com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.downloadGemma4E2B(getApplicationContext(), transfer);
+                else com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.downloadRecommended(getApplicationContext(), transfer);
                 ok = true;
             } catch (Exception e) { android.util.Log.e("SettingActivity", "Local AI model download failed", e); }
             final boolean downloaded = ok;
@@ -268,7 +323,7 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
                 }
                 if (name == null || !name.toLowerCase(java.util.Locale.ROOT).endsWith(".litertlm"))
                     throw new java.io.IOException("Expected a .litertlm model file");
-                com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.importModel(getApplicationContext(), uri);
+                com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.importModel(getApplicationContext(), uri, name);
                 ok = true;
             } catch (Exception e) { android.util.Log.e("SettingActivity", "Local AI model import failed", e); }
             final boolean imported = ok;
