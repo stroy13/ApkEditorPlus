@@ -120,7 +120,7 @@ public class HttpServer extends NanoHTTPD {
                 String filePath = getFilePath(uri); // 根据url获取文件路径
 
                 if (filePath == null) {
-                    return super.serve(session);
+                    return notFound();
                 }
 
                 File file = new File(filePath);
@@ -150,7 +150,12 @@ public class HttpServer extends NanoHTTPD {
         String content = params.get("content");
 
         if (relativePath != null && content != null) {
-            File file = new File(projectDirectory + "/" + relativePath);
+            File file;
+            try {
+                file = resolveProjectFile(relativePath);
+            } catch (IOException e) {
+                return notFound();
+            }
             if (file.isFile() && file.exists()) {
                 FileOutputStream fos = null;
                 try {
@@ -173,7 +178,12 @@ public class HttpServer extends NanoHTTPD {
     private Response readImage(Map<String, String> params) {
         String relativePath = params.get("path");
 
-        File file = new File(projectDirectory + "/" + relativePath);
+        File file;
+        try {
+            file = resolveProjectFile(relativePath);
+        } catch (IOException e) {
+            return notFound();
+        }
         if (!file.exists() || !file.isFile()) {
             return notFound();
         }
@@ -190,7 +200,12 @@ public class HttpServer extends NanoHTTPD {
     private Response readFile(Map<String, String> params) {
         String relativePath = params.get("path");
 
-        File file = new File(projectDirectory + "/" + relativePath);
+        File file;
+        try {
+            file = resolveProjectFile(relativePath);
+        } catch (IOException e) {
+            return notFound();
+        }
         if (!file.exists() || !file.isFile()) {
             return notFound();
         }
@@ -356,7 +371,12 @@ public class HttpServer extends NanoHTTPD {
             subPath += "/";
         }
 
-        File dir = new File(projectDirectory + "/" + subPath);
+        File dir;
+        try {
+            dir = resolveProjectFile(subPath);
+        } catch (IOException e) {
+            return notFound();
+        }
         if (!dir.exists() || !dir.isDirectory()) {
             return notFound();
         }
@@ -393,10 +413,28 @@ public class HttpServer extends NanoHTTPD {
     }
 
     private String getFilePath(String uri) {
-        if ("/".equals(uri)) {
-            return httpDirectory + "/index.htm";
+        String relativePath = "/".equals(uri) ? "index.htm"
+                : (uri.startsWith("/") ? uri.substring(1) : uri);
+        try {
+            File root = new File(httpDirectory).getCanonicalFile();
+            File file = new File(root, relativePath).getCanonicalFile();
+            String rootPath = root.getPath();
+            if (!file.getPath().startsWith(rootPath + File.separator)) return null;
+            return file.getPath();
+        } catch (IOException e) {
+            return null;
         }
-        return httpDirectory + uri;
+    }
+
+    File resolveProjectFile(String relativePath) throws IOException {
+        if (relativePath == null) throw new IOException("Missing project path");
+        File root = new File(projectDirectory).getCanonicalFile();
+        File file = new File(root, relativePath).getCanonicalFile();
+        String rootPath = root.getPath();
+        if (!file.equals(root) && !file.getPath().startsWith(rootPath + File.separator)) {
+            throw new IOException("Path escapes project directory");
+        }
+        return file;
     }
 
     private String getMimeType(String filePath) {

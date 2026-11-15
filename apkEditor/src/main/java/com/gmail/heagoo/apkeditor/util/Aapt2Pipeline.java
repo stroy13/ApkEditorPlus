@@ -7,6 +7,8 @@ import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Set;
+import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
 /* loaded from: /tmp/apkx/classes9.dex */
@@ -29,6 +31,7 @@ public final class Aapt2Pipeline {
             throw new IOException("Cannot remove old AAPT2 output");
         }
         Path staged = null;
+        Path missingAttributeStage = null;
         Path stagedManifest = null;
         try {
             Path original = new File(resDir).toPath().toAbsolutePath();
@@ -70,16 +73,29 @@ public final class Aapt2Pipeline {
             try {
                 runTimed(linkArgs, logger);
             } catch (IOException strictFailure) {
-                if (!isKnownOldManifestValidationFailure(strictFailure.getMessage())) throw strictFailure;
-                if (out.exists() && !out.delete()) throw new IOException("Cannot remove failed AAPT2 output", strictFailure);
-                if (logger != null) logger.log("AAPT2: older manifest validator rejected modern elements; retrying with validation warnings. Original error: " + strictFailure.getMessage());
-                String[] retry = new String[linkArgs.length + 1];
-                System.arraycopy(linkArgs, 0, retry, 0, linkArgs.length);
-                retry[linkArgs.length] = "--warn-manifest-validation";
-                String warnings = runTimed(retry, logger);
-                if (!safeRetryWarnings(warnings)) {
-                    if (out.exists()) out.delete();
-                    throw new IOException("AAPT2 manifest validation reported additional problems: " + warnings, strictFailure);
+                String manifestXml = new String(Files.readAllBytes(new File(manifest).toPath()), java.nio.charset.StandardCharsets.UTF_8);
+                Set<String> missingAttributes = Aapt2MissingAttributes.find(strictFailure.getMessage(), manifestXml);
+                if (!missingAttributes.isEmpty()) {
+                    if (out.exists() && !out.delete()) throw new IOException("Cannot remove failed AAPT2 output", strictFailure);
+                    missingAttributeStage = Files.createTempDirectory(out.getAbsoluteFile().getParentFile().toPath(), "aapt2-attrs-");
+                    Aapt2DummyResources.stage(new File(compileDir).toPath(), missingAttributeStage, Collections.<Path, byte[]>emptyMap());
+                    Aapt2MissingAttributes.writeDeclarations(missingAttributeStage, missingAttributes);
+                    if (logger != null) logger.log("AAPT2: undeclared app attributes " + missingAttributes + "; adding temporary declarations and retrying link");
+                    if (flat.exists() && !flat.delete()) throw new IOException("Cannot remove failed AAPT2 intermediates", strictFailure);
+                    try {
+                        runTimed(new String[]{aapt2, "compile", "--legacy", "--no-crunch", "--dir", missingAttributeStage.toString(), "-o", flat.getAbsolutePath()}, logger);
+                    } catch (IOException compileFailure) {
+                        throw new IOException(compileFailure.getMessage().replace(missingAttributeStage.toString(), new File(resDir).getAbsolutePath()), compileFailure);
+                    }
+                    linkArgs[linkArgs.length - 1] = flat.getAbsolutePath();
+                    compileDir = missingAttributeStage.toString();
+                    try {
+                        runTimed(linkArgs, logger);
+                    } catch (IOException retryFailure) {
+                        retryLinkWithManifestCompatibility(retryFailure, linkArgs, out, logger);
+                    }
+                } else {
+                    retryLinkWithManifestCompatibility(strictFailure, linkArgs, out, logger);
                 }
             }
             if (!aliases.isEmpty()) {
@@ -95,10 +111,27 @@ public final class Aapt2Pipeline {
             }
         } finally {
             if (staged != null) Aapt2DummyResources.deleteTree(staged);
+            if (missingAttributeStage != null) Aapt2DummyResources.deleteTree(missingAttributeStage);
             if (stagedManifest != null) Files.deleteIfExists(stagedManifest);
             if (flat.exists()) {
                 flat.delete();
             }
+        }
+    }
+
+    private static void retryLinkWithManifestCompatibility(IOException failure, String[] linkArgs,
+                                                              File output, ApkBuildPipeline.Logger logger)
+            throws IOException, InterruptedException {
+        if (!isKnownOldManifestValidationFailure(failure.getMessage())) throw failure;
+        if (output.exists() && !output.delete()) throw new IOException("Cannot remove failed AAPT2 output", failure);
+        if (logger != null) logger.log("AAPT2: older manifest validator rejected modern elements; retrying with validation warnings. Original error: " + failure.getMessage());
+        String[] retry = new String[linkArgs.length + 1];
+        System.arraycopy(linkArgs, 0, retry, 0, linkArgs.length);
+        retry[linkArgs.length] = "--warn-manifest-validation";
+        String warnings = runTimed(retry, logger);
+        if (!safeRetryWarnings(warnings)) {
+            if (output.exists()) output.delete();
+            throw new IOException("AAPT2 manifest validation reported additional problems: " + warnings, failure);
         }
     }
 

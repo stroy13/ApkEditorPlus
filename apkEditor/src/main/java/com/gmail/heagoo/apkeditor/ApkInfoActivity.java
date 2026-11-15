@@ -3730,72 +3730,13 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
     }
 
     private void modifyStringResource(String qualifier, Map<String, String> modifiedValues) throws Exception {
-        String fileName;
-        String dirPath;
-        String fileName2 = "strings.xml";
-        String dirPath2 = this.decodeRootPath + "/res/values" + qualifier;
-        File dirFile = new File(dirPath2);
-        if (!dirFile.exists()) {
-            dirFile.mkdirs();
+        String dirPath = this.decodeRootPath + "/res/values" + qualifier;
+        File dir = new File(dirPath);
+        if (!dir.exists() && !dir.mkdirs() && !dir.isDirectory()) {
+            throw new IOException("Cannot create resource directory: " + dirPath);
         }
-        String filePath = dirPath2 + "/strings.xml";
-        List<String> lines = new TextFileReader(filePath).getLines();
-        List<String> newLines = new ArrayList<>();
-        int lastStringLine = -1;
-        Set<String> savedStrings = new HashSet<>();
-        int i = 0;
-        while (i < lines.size()) {
-            String line = lines.get(i);
-            int pos = line.indexOf("<string name=\"");
-            if (pos == -1) {
-                newLines.add(line);
-                fileName = fileName2;
-            } else {
-                int start = "<string name=\"".length() + pos;
-                int end = line.indexOf(34, start);
-                fileName = fileName2;
-                if (end == -1) {
-                    newLines.add(line);
-                } else {
-                    String name = line.substring(start, end);
-                    dirPath = dirPath2;
-                    String newValue = modifiedValues.get(name);
-                    if (newValue != null) {
-                        newLines.add(StringItem.toString(name, newValue, (String) null));
-                        savedStrings.add(name);
-                        if (!line.contains("</string>")) {
-                            while (true) {
-                                i++;
-                                String name2 = name;
-                                if (i >= lines.size() || lines.get(i).contains("</string>")) {
-                                    break;
-                                } else {
-                                    name = name2;
-                                }
-                            }
-                        }
-                    } else {
-                        newLines.add(line);
-                    }
-                    lastStringLine = newLines.size() - 1;
-                    i++;
-                    dirPath2 = dirPath;
-                    fileName2 = fileName;
-                }
-            }
-            dirPath = dirPath2;
-            i++;
-            dirPath2 = dirPath;
-            fileName2 = fileName;
-        }
-        for (Map.Entry<String, String> entry : modifiedValues.entrySet()) {
-            String name3 = entry.getKey();
-            if (!savedStrings.contains(name3)) {
-                lastStringLine++;
-                lines.add(lastStringLine, StringItem.toString(name3, entry.getValue(), (String) null));
-            }
-        }
-        FileUtil.writeToFile(filePath, newLines);
+        String filePath = dirPath + "/strings.xml";
+        StringResourceFileEditor.save(new File(filePath), modifiedValues);
     }
 
     protected void searchStringByKeyword(String keyword) {

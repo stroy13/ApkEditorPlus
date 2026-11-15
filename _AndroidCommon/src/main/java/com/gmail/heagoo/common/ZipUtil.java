@@ -31,12 +31,7 @@ public class ZipUtil {
             while (zList.hasMoreElements()) {
                 ze = (ZipEntry) zList.nextElement();
                 if (ze.isDirectory()) {
-                    String absPath = zipDir;
-                    if (!zipDir.endsWith("/")) {
-                        absPath += "/";
-                        absPath += ze.getName();
-                    }
-                    File f = new File(absPath);
+                    File f = getFile(zipDir, ze.getName());
                     f.mkdirs();
                     // Log.d("DEBUG", "dir=" + zipDir + ze.getName() + ", ret="
                     // + ret);
@@ -96,7 +91,7 @@ public class ZipUtil {
                 String relativePath = ze.getName()
                         .substring(entryPath.length());
                 if (ze.isDirectory()) {
-                    File f = new File(dstPath + "/" + relativePath);
+                    File f = getFile(dstPath, relativePath);
                     f.mkdirs();
                     continue;
                 }
@@ -134,12 +129,7 @@ public class ZipUtil {
             while (zList.hasMoreElements()) {
                 ze = (ZipEntry) zList.nextElement();
                 if (ze.isDirectory()) {
-                    String absPath = zipDir;
-                    if (!zipDir.endsWith("/")) {
-                        absPath += "/";
-                        absPath += ze.getName();
-                    }
-                    File f = new File(absPath);
+                    File f = getFile(zipDir, ze.getName());
                     f.mkdirs();
                     // Log.d("DEBUG", "dir=" + zipDir + ze.getName() + ", ret="
                     // + ret);
@@ -278,23 +268,18 @@ public class ZipUtil {
         }
     }
 
-    private static File getFile(String baseDir, String relativePath) {
-        String[] dirs = relativePath.split("/");
-        File ret = new File(baseDir);
-        if (!ret.exists()) {
-            ret.mkdirs();
+    private static File getFile(String baseDir, String relativePath) throws IOException {
+        File root = new File(baseDir).getCanonicalFile();
+        File target = new File(root, relativePath).getCanonicalFile();
+        String rootPath = root.getPath();
+        if (!target.equals(root) && !target.getPath().startsWith(rootPath + File.separator)) {
+            throw new IOException("ZIP entry escapes destination directory: " + relativePath);
         }
-
-        if (dirs.length > 1) {
-            for (int i = 0; i < dirs.length - 1; i++) {
-                ret = new File(ret, dirs[i]);
-            }
-            if (!ret.exists())
-                ret.mkdirs();
+        File parent = target.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.isDirectory()) {
+            throw new IOException("Cannot create extraction directory: " + parent);
         }
-
-        ret = new File(ret, dirs[dirs.length - 1]);
-        return ret;
+        return target;
     }
 
     private static int getSlashNum(String str) {
