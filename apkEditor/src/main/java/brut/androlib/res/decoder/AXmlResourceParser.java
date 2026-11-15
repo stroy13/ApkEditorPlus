@@ -819,26 +819,33 @@ public class AXmlResourceParser implements XmlResourceParser {
 
             // Common header.
             int chunkSize = m_reader.readInt();
-            if (chunkSize < 16) {
-                throw new IOException("Invalid XML chunk size (" + chunkSize + ").");
+            if (chunkHeaderSize < 16 || chunkSize < chunkHeaderSize) {
+                throw new IOException("Invalid XML chunk header/size (header="
+                        + chunkHeaderSize + ", size=" + chunkSize + ").");
             }
             int lineNumber = m_reader.readInt();
             /* 0xFFFFFFFF */
             m_reader.skipInt();
+            if (chunkHeaderSize > 16) {
+                int extraHeader = chunkHeaderSize - 16;
+                if (m_reader.skipBytes(extraHeader) != extraHeader) {
+                    throw new IOException("Truncated XML chunk header");
+                }
+            }
 
             if (rawChunkType == 0x0100 || rawChunkType == 0x0101) {
                 if (rawChunkType == 0x0100) {
                     int prefix = m_reader.readInt();
                     int uri = m_reader.readInt();
                     m_namespaces.push(prefix, uri);
-                    skipChunkRemainder(chunkSize, 24);
+                    skipChunkRemainder(chunkSize, chunkHeaderSize + 8);
                 } else {
                     /* prefix */
                     m_reader.skipInt();
                     /* uri */
                     m_reader.skipInt();
                     m_namespaces.pop();
-                    skipChunkRemainder(chunkSize, 24);
+                    skipChunkRemainder(chunkSize, chunkHeaderSize + 8);
                 }
                 continue;
             }
@@ -848,16 +855,40 @@ public class AXmlResourceParser implements XmlResourceParser {
             if (rawChunkType == 0x0102) {
                 m_namespaceUri = m_reader.readInt();
                 m_name = m_reader.readInt();
-                /* flags? */
-                m_reader.skipInt();
-                int attributeCount = m_reader.readInt();
-                m_idAttribute = (attributeCount >>> 16) - 1;
-                attributeCount &= 0xFFFF;
+                int attributeInfo = m_reader.readInt();
+                int attributeStart = attributeInfo & 0xFFFF;
+                int attributeSize = (attributeInfo >>> 16) & 0xFFFF;
+                int attributeCountAndId = m_reader.readInt();
+                m_idAttribute = (attributeCountAndId >>> 16) - 1;
+                int attributeCount = attributeCountAndId & 0xFFFF;
                 m_classAttribute = m_reader.readInt();
                 m_styleAttribute = (m_classAttribute >>> 16) - 1;
                 m_classAttribute = (m_classAttribute & 0xFFFF) - 1;
-                m_attributes = m_reader.readIntArray(attributeCount * ATTRIBUTE_LENGTH);
-                skipChunkRemainder(chunkSize, 36 + attributeCount * ATTRIBUTE_LENGTH * 4);
+                if (attributeStart < 20 || attributeSize < ATTRIBUTE_LENGTH * 4
+                        || (attributeSize % 4) != 0
+                        || (long) chunkHeaderSize + attributeStart
+                        + (long) attributeCount * attributeSize > chunkSize) {
+                    throw new IOException("Invalid attribute layout (start=" + attributeStart
+                            + ", size=" + attributeSize + ").");
+                }
+                int attributePadding = attributeStart - 20;
+                if (attributePadding > 0 && m_reader.skipBytes(attributePadding) != attributePadding) {
+                    throw new IOException("Truncated attribute extension");
+                }
+                m_attributes = new int[attributeCount * ATTRIBUTE_LENGTH];
+                int extraAttributeBytes = attributeSize - ATTRIBUTE_LENGTH * 4;
+                for (int i = 0; i < attributeCount; i++) {
+                    int base = i * ATTRIBUTE_LENGTH;
+                    for (int j = 0; j < ATTRIBUTE_LENGTH; j++) {
+                        m_attributes[base + j] = m_reader.readInt();
+                    }
+                    if (extraAttributeBytes > 0
+                            && m_reader.skipBytes(extraAttributeBytes) != extraAttributeBytes) {
+                        throw new IOException("Truncated extended attribute");
+                    }
+                }
+                skipChunkRemainder(chunkSize, chunkHeaderSize + attributeStart
+                        + attributeCount * attributeSize);
                 for (int i = ATTRIBUTE_IX_VALUE_TYPE; i < m_attributes.length; ) {
                     m_attributes[i] = (m_attributes[i] >>> 24);
                     i += ATTRIBUTE_LENGTH;
@@ -870,7 +901,7 @@ public class AXmlResourceParser implements XmlResourceParser {
             if (rawChunkType == 0x0103) {
                 m_namespaceUri = m_reader.readInt();
                 m_name = m_reader.readInt();
-                skipChunkRemainder(chunkSize, 24);
+                skipChunkRemainder(chunkSize, chunkHeaderSize + 8);
                 m_event = END_TAG;
                 m_decreaseDepth = true;
                 break;
@@ -882,7 +913,7 @@ public class AXmlResourceParser implements XmlResourceParser {
                 m_reader.skipInt();
                 /* ? */
                 m_reader.skipInt();
-                skipChunkRemainder(chunkSize, 28);
+                skipChunkRemainder(chunkSize, chunkHeaderSize + 12);
                 m_event = TEXT;
                 break;
             }
