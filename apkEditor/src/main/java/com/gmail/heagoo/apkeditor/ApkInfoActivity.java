@@ -3353,7 +3353,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                 else if (currentName.get().isEmpty()) progress.setMessage(getString(R.string.ai_loading_elapsed,
                         (android.os.SystemClock.elapsedRealtime() - started) / 1000));
                 else progress.setMessage(getString(R.string.ai_progress_elapsed, completed.get(), snapshot.size(),
-                        currentName.get(), (android.os.SystemClock.elapsedRealtime() - started) / 1000) + "\n" + trace.nativeStatus());
+                        currentName.get(), (android.os.SystemClock.elapsedRealtime() - started) / 1000));
                 if (++ticks % 5 == 0) diagnostics.save();
                 timer.postDelayed(this, 1000);
             }

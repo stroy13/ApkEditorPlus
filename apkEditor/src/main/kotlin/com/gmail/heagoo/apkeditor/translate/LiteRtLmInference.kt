@@ -54,14 +54,11 @@ class LiteRtLmInference(
         val sourceLanguage = sourceCode?.let {
             java.util.Locale.forLanguageTag(it).getDisplayLanguage(java.util.Locale.ENGLISH)
         } ?: "the source language inferred from the text"
-        val cyrillicTarget = language.equals("Russian", ignoreCase = true)
-        val languageRule = if (cyrillicTarget) "The result MUST be Russian written in Cyrillic; do not leave English UI words untranslated." else "Translate into the requested target language."
-        val prompt = """Translate Android UI text from $sourceLanguage to $language. $languageRule Return only a concise, natural translation. Preserve placeholders, tags, escapes and formatting exactly. Keep product names unchanged.
-Key: $resourceName
-Text: $value
-Translation:""".trimIndent()
+        val prompt = """Translate this Android UI string from $sourceLanguage into natural $language. Use concise wording a native speaker would use. Keep placeholders, markup, escapes, product names and keyboard shortcuts unchanged. Output only the translation, never instructions or explanations.
+Resource: $resourceName
+$value""".trimIndent()
         val conversationConfig = ConversationConfig(
-            samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),
+            samplerConfig = SamplerConfig(topK = 32, topP = 0.9, temperature = 0.25),
             maxOutputToken = 48
         )
         val first = generate(prompt, conversationConfig)
@@ -75,10 +72,12 @@ Translation:""".trimIndent()
         } catch (rejected: TranslationRejectedException) {
             if (rejected.reason() != TranslationRejectedException.Reason.EMPTY
                     && rejected.reason() != TranslationRejectedException.Reason.PLACEHOLDER
-                    && rejected.reason() != TranslationRejectedException.Reason.LANGUAGE) throw rejected
+                    && rejected.reason() != TranslationRejectedException.Reason.LANGUAGE
+                    && rejected.reason() != TranslationRejectedException.Reason.REASONING) throw rejected
             if (cancelled.get()) throw IOException("Translation cancelled")
-            val retry = "$prompt\nThe previous answer was invalid. Translate the complete source now. Output visible translated text only, preserving every resource token exactly."
-            val second = generate(retry, conversationConfig)
+            // A fresh conversation with the exact same short prompt avoids exposing repair instructions
+            // in the returned resource string (small models often echo appended retry directions).
+            val second = generate(prompt, conversationConfig)
             if (cancelled.get()) throw IOException("Translation cancelled")
             val cleaned = TranslationOutput.clean(value, second)
             if (requiresCyrillic(language, value) && !TranslationOutput.containsCyrillic(cleaned))

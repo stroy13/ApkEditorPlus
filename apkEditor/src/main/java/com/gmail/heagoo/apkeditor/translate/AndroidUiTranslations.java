@@ -49,8 +49,13 @@ public final class AndroidUiTranslations {
         add(result, "abc_menu_function_shortcut_label", "Function+", "Fn +");
         add(result, "abc_menu_space_shortcut_label", "space", "Пробел");
         add(result, "abc_menu_enter_shortcut_label", "enter", "Ввод");
-        add(result, "abc_menu_delete_shortcut_label", "delete", "Delete");
+        add(result, "abc_menu_delete_shortcut_label", "delete", "Удалить");
         add(result, "copy", "Copy", "Копировать");
+        add(result, "a11y_action_label_collapse", "Collapse", "Свернуть");
+        add(result, "a11y_action_label_expand", "Expand", "Развернуть");
+        add(result, "call_notification_hang_up_action", "Hang Up", "Завершить вызов");
+        add(result, "close_sheet", "Close sheet", "Закрыть панель");
+        add(result, "confirm_device_credential_password", "Use password", "Использовать пароль");
         add(result, "default_error_message", "Invalid input", "Недопустимые данные");
         add(result, "fingerprint_error_no_fingerprint", "No fingerprints are enrolled", "Отпечатки пальцев не добавлены");
         add(result, "fingerprint_error_hw_not_present", "This device does not have a fingerprint sensor", "На устройстве нет датчика отпечатков пальцев");

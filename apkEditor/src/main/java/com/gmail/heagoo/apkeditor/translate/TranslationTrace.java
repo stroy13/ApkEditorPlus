@@ -116,7 +116,19 @@ public final class TranslationTrace {
             add("native phase=" + stage + " generated=" + generated + " prompt_tokens=" + promptTokens + " detail=" + detail);
     }
     public synchronized String nativeStatus() {
-        return stage.name() + " (" + generated + " tokens)";
+        switch (stage) {
+            case LOAD_MODEL: return "Загрузка локальной модели";
+            case MODEL_READY: return "Модель готова";
+            case PREPARE_STRING: return "Подготовка строки";
+            case NATIVE_TEMPLATE:
+            case NATIVE_TOKENIZE:
+            case NATIVE_PREFILL: return "Подготовка перевода";
+            case NATIVE_SAMPLE:
+            case NATIVE_DECODE: return "Перевод на устройстве";
+            case VALIDATE: return "Проверка перевода";
+            case STRING_DONE: return "Строка готова";
+            default: return "Обработка локальной моделью";
+        }
     }
     public synchronized void nativeResult(int tokens, long promptMs, long generateMs) {
         stage = Stage.NATIVE_RETURNED;

@@ -11,6 +11,9 @@ public class AndroidUiTranslationsTest {
         assertEquals("Копировать", AndroidUiTranslations.find("en", "ru", "copy", "Copy"));
         assertEquals("ВЫКЛ", AndroidUiTranslations.find("en", "ru", "abc_capital_off", "OFF"));
         assertEquals("Недопустимые данные", AndroidUiTranslations.find("en", "ru", "default_error_message", "Invalid input"));
+        assertEquals("Развернуть", AndroidUiTranslations.find("en", "ru", "a11y_action_label_expand", "Expand"));
+        assertEquals("Завершить вызов", AndroidUiTranslations.find("en", "ru", "call_notification_hang_up_action", "Hang Up"));
+        assertEquals("Удалить", AndroidUiTranslations.find("en", "ru", "abc_menu_delete_shortcut_label", "delete"));
         assertNull(AndroidUiTranslations.find("en", "ru", "unknown_copy", "Copy"));
         assertNull(AndroidUiTranslations.find("en", "ru", "abc_action_mode_done", "Done now"));
         assertNull(AndroidUiTranslations.find("fr", "ru", "abc_action_mode_done", "Done"));

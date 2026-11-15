@@ -24,7 +24,26 @@ public final class LocalLlmModelStore {
         return file.isFile() && file.length() > 0 ? file : null;
     }
 
+    public static File[] available(Context context) {
+        File dir = directory(context);
+        File[] files = dir.listFiles(file -> file.isFile() && file.length() > 0 && file.getName().endsWith(".litertlm"));
+        if (files == null) return new File[0];
+        java.util.Arrays.sort(files, java.util.Comparator.comparing(File::getName));
+        return files;
+    }
+
+    public static boolean select(Context context, String fileName) {
+        if (fileName == null || fileName.contains("/") || fileName.contains("\\")) return false;
+        File file = new File(directory(context), fileName);
+        return file.isFile() && file.length() > 0
+                && context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(SELECTED, fileName).commit();
+    }
+
     public static File importModel(Context context, Uri uri) throws IOException {
+        return importModel(context, uri, null);
+    }
+
+    public static File importModel(Context context, Uri uri, String displayName) throws IOException {
         File dir = directory(context);
         if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Cannot create local model directory");
         File temp = File.createTempFile("model-", ".partial", dir);
@@ -40,15 +59,17 @@ public final class LocalLlmModelStore {
             }
             if (temp.length() == 0) throw new IOException("Selected model is empty");
             out.getFD().sync();
-            String name = UUID.randomUUID().toString() + ".litertlm";
+            String label = displayName == null ? "local-model" : new File(displayName).getName().replaceAll("(?i)\\.litertlm$", "")
+                    .replaceAll("[^A-Za-z0-9._-]", "_");
+            if (label.isEmpty()) label = "local-model";
+            if (label.length() > 48) label = label.substring(0, 48);
+            String name = label + "-" + UUID.randomUUID().toString().substring(0, 8) + ".litertlm";
             File target = new File(dir, name);
             if (!temp.renameTo(target)) throw new IOException("Cannot store local model");
-            String old = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(SELECTED, null);
             if (!context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(SELECTED, name).commit()) {
                 target.delete();
                 throw new IOException("Cannot select local model");
             }
-            if (old != null && !old.equals(name)) new File(dir, old).delete();
             committed = true;
             return target;
         } finally { if (!committed) temp.delete(); }
@@ -62,15 +83,13 @@ public final class LocalLlmModelStore {
             downloaded.delete();
             throw new IOException("Recommended model size mismatch");
         }
-        String name = UUID.randomUUID().toString() + ".litertlm";
+        String name = "gemma3-1b-int4-" + UUID.randomUUID().toString().substring(0, 8) + ".litertlm";
         File target = new File(dir, name);
         if (!downloaded.renameTo(target)) { downloaded.delete(); throw new IOException("Cannot install downloaded model"); }
-        String old = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(SELECTED, null);
         if (!context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(SELECTED, name).commit()) {
             target.delete();
             throw new IOException("Cannot select downloaded model");
         }
-        if (old != null && !old.equals(name)) new File(dir, old).delete();
         return target;
     }
 

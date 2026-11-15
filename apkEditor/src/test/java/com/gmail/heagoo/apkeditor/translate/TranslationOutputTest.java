@@ -31,6 +31,11 @@ public class TranslationOutputTest {
         assertFalse(TranslationOutput.hasVisibleContent(invisible));
         assertTrue(TranslationOutput.hasVisibleContent("Готово"));
     }
+    @Test public void rejectsPromptInstructionsLeakedByModel() {
+        try { TranslationOutput.clean("Expand", "The previous answer was invalid. Output visible translated text only."); fail(); }
+        catch (TranslationRejectedException expected) { assertEquals(TranslationRejectedException.Reason.REASONING, expected.reason()); }
+        catch (IOException unexpected) { fail(unexpected.toString()); }
+    }
     @Test public void recognizesCyrillicOutput() {
         assertTrue(TranslationOutput.containsCyrillic("Перейти вверх"));
         assertFalse(TranslationOutput.containsCyrillic("Navigate up"));

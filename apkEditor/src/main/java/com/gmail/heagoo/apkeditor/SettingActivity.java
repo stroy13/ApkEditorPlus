@@ -183,14 +183,36 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
 
     private void showLocalAiModelMenu() {
         new android.app.AlertDialog.Builder(this).setTitle(R.string.ai_models)
-                .setItems(new String[]{getString(R.string.ai_download), getString(R.string.ai_import)}, (dialog, which) -> {
+                .setItems(new String[]{getString(R.string.ai_download), getString(R.string.ai_import), getString(R.string.ai_select_model)}, (dialog, which) -> {
                     if (which == 0) confirmRecommendedModelDownload();
-                    else {
+                    else if (which == 1) {
                         Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                         pick.addCategory(Intent.CATEGORY_OPENABLE);
                         pick.setType("*/*");
                         startActivityForResult(pick, 9274);
-                    }
+                    } else chooseInstalledLocalModel();
+                }).setNegativeButton(android.R.string.cancel, null).show();
+    }
+
+    private void chooseInstalledLocalModel() {
+        java.io.File[] models = com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.available(this);
+        if (models.length == 0) {
+            android.widget.Toast.makeText(this, R.string.ai_no_installed_models, android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
+        String[] names = new String[models.length];
+        String selected = com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.selected(this) == null ? null
+                : com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.selected(this).getName();
+        int checked = -1;
+        for (int i = 0; i < models.length; i++) {
+            names[i] = models[i].getName() + " (" + android.text.format.Formatter.formatFileSize(this, models[i].length()) + ")";
+            if (models[i].getName().equals(selected)) checked = i;
+        }
+        new android.app.AlertDialog.Builder(this).setTitle(R.string.ai_select_model)
+                .setSingleChoiceItems(names, checked, (d, which) -> {
+                    boolean ok = com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.select(this, models[which].getName());
+                    if (ok) d.dismiss();
+                    else android.widget.Toast.makeText(this, R.string.ai_model_import_failed, android.widget.Toast.LENGTH_LONG).show();
                 }).setNegativeButton(android.R.string.cancel, null).show();
     }
 
@@ -268,7 +290,7 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
                 }
                 if (name == null || !name.toLowerCase(java.util.Locale.ROOT).endsWith(".litertlm"))
                     throw new java.io.IOException("Expected a .litertlm model file");
-                com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.importModel(getApplicationContext(), uri);
+                com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.importModel(getApplicationContext(), uri, name);
                 ok = true;
             } catch (Exception e) { android.util.Log.e("SettingActivity", "Local AI model import failed", e); }
             final boolean imported = ok;
