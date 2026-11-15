@@ -1,5 +1,6 @@
 package com.gmail.heagoo.apkeditor.util;
 
+import com.gmail.heagoo.common.CommandRunner;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.Assume;
@@ -13,7 +14,7 @@ import java.util.Set;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-public class Aapt2MissingAttributesTest {
+public class MissingResourceAttributesTest {
     @Rule public TemporaryFolder folder = new TemporaryFolder();
 
     @Test public void extractsOnlyUndeclaredAttributesFromTheAppPackage() {
@@ -22,17 +23,59 @@ public class Aapt2MissingAttributesTest {
                 + "layout/c.xml: error: attribute label (aka android:label) not found.\n"
                 + "layout/d.xml: error: attribute other (aka com.other:other) not found.";
         Set<String> expected = new LinkedHashSet<>(Arrays.asList("glance_isTopLevelLayout", "customFlag"));
-        assertEquals(expected, Aapt2MissingAttributes.find(errors,
+        assertEquals(expected, MissingResourceAttributes.find(errors,
                 "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"org.mozilla.firefox\"/>"));
+    }
+
+    @Test public void parsesLegacyAaptDiagnosticsFromTheAppPackage() {
+        String errors = "res/layout/a.xml:2: error: No resource identifier found for attribute 'glance_isTopLevelLayout' in package 'org.mozilla.firefox'\n"
+                + "res/layout/b.xml:2: error: No resource identifier found for attribute 'otherFlag' in package 'org.mozilla.firefox'\n"
+                + "res/layout/c.xml:2: error: No resource identifier found for attribute 'text' in package 'android'";
+        assertEquals(new LinkedHashSet<>(Arrays.asList("glance_isTopLevelLayout", "otherFlag")),
+                MissingResourceAttributes.find(errors, "<manifest package=\"org.mozilla.firefox\"/>"));
     }
 
     @Test public void writesTemporaryDeclarationsAsResourceXml() throws Exception {
         Path res = folder.newFolder("res").toPath();
-        Path file = Aapt2MissingAttributes.writeDeclarations(res,
+        Path file = MissingResourceAttributes.writeDeclarations(res,
                 new LinkedHashSet<>(Arrays.asList("glance_isTopLevelLayout", "customFlag")));
         String xml = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
         assertTrue(xml.contains("<attr name=\"glance_isTopLevelLayout\"/>"));
         assertTrue(xml.contains("<attr name=\"customFlag\"/>"));
+    }
+
+    @Test public void legacyAaptRetryStagesDeclarationsWithoutTouchingProject() throws Exception {
+        Path root = folder.newFolder("legacy").toPath();
+        Path res = Files.createDirectory(root.resolve("res"));
+        Files.createDirectory(res.resolve("values"));
+        Path manifest = root.resolve("AndroidManifest.xml");
+        Files.write(manifest, "<manifest package=\"org.mozilla.firefox\"/>".getBytes(StandardCharsets.UTF_8));
+        final boolean[] stagedDeclarationSeen = {false};
+        CommandRunner runner = new CommandRunner() {
+            private int runs;
+            @Override public boolean runCommand(Object command, String[] env, String cwd, Integer timeout, boolean readWhileExec) {
+                runs++;
+                if (runs == 1) return false;
+                String[] args = (String[]) command;
+                for (int i = 0; i + 1 < args.length; i++) {
+                    if ("-S".equals(args[i])) {
+                        stagedDeclarationSeen[0] = Files.isRegularFile(new java.io.File(args[i + 1], "values/ae_missing_attrs.xml").toPath());
+                    }
+                }
+                return stagedDeclarationSeen[0];
+            }
+            @Override public String getStdError() {
+                return "res/layout/a.xml:2: error: No resource identifier found for attribute 'glance_isTopLevelLayout' in package 'org.mozilla.firefox'";
+            }
+            @Override public String getStdOut() { return ""; }
+        };
+        assertTrue(MissingResourceAttributes.runLegacyAaptWithRetry(runner,
+                new String[]{"aapt", "package", "-S", res.toString(), "-M", manifest.toString()},
+                res.toString(), manifest.toString(), null));
+        assertTrue(stagedDeclarationSeen[0]);
+        try (java.util.stream.Stream<Path> files = Files.list(res.resolve("values"))) {
+            assertEquals(0L, files.count());
+        }
     }
 
     @Test public void pipelineRetriesOnlyAfterLinkReportsMissingAppAttributes() throws Exception {
@@ -46,7 +89,7 @@ public class Aapt2MissingAttributesTest {
         Path aapt = root.resolve("fake-aapt2.sh");
         String script = "#!/bin/sh\n"
                 + "base=$(dirname \"$0\")\n"
-                + "if [ \"$1\" = compile ]; then shift; for arg in \"$@\"; do case \"$arg\" in *aapt2-attrs-*) [ -f \"$arg/values/ae_aapt2_missing_attrs.xml\" ] && touch \"$base/attrs-seen\";; esac; done; touch \"$base/fake-flat\"; exit 0; fi\n"
+                + "if [ \"$1\" = compile ]; then shift; for arg in \"$@\"; do case \"$arg\" in *aapt2-attrs-*) [ -f \"$arg/values/ae_missing_attrs.xml\" ] && touch \"$base/attrs-seen\";; esac; done; touch \"$base/fake-flat\"; exit 0; fi\n"
                 + "if [ ! -f \"$base/first-link\" ]; then echo 'layout/a.xml: error: attribute glance_isTopLevelLayout (aka org.mozilla.firefox:glance_isTopLevelLayout) not found.' >&2; touch \"$base/first-link\"; exit 1; fi\n"
                 + "echo fake > \"$base/out.apk\"; exit 0\n";
         Files.write(aapt, script.getBytes(StandardCharsets.UTF_8));
