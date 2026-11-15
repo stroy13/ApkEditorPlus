@@ -20,6 +20,7 @@ import brut.directory.FileDirectory;
 import brut.util.KXmlSerializer;
 import com.gmail.heagoo.apkeditor.XmlDecoder;
 import com.gmail.heagoo.apkeditor.util.TimeDumper;
+import com.gmail.heagoo.apkeditor.util.ApkResourceLayout;
 import com.gmail.heagoo.apklib.AXMLParser;
 import com.gmail.heagoo.common.FileUtil;
 import com.gmail.heagoo.neweditor.Encoding;
@@ -125,7 +126,7 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
 
     public void decode(ExtFile apkFile, File outDir) throws Exception {
         Directory inApk = apkFile.getDirectory();
-        if (!inApk.containsDir("res")) {
+        if (!ApkResourceLayout.hasStandardResourceFiles(inApk)) {
             this.protectedApk = true;
             this.xmlDecoder.setApkProtected(true);
         }

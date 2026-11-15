@@ -13,6 +13,7 @@ import brut.directory.Directory;
 import com.gmail.heagoo.apkeditor.ApkDecoderMine;
 import com.gmail.heagoo.apkeditor.base.R;
 import com.gmail.heagoo.apkeditor.smali.ResSmaliIdProvider;
+import com.gmail.heagoo.apkeditor.util.ApkResourceLayout;
 import com.gmail.heagoo.apklib.ManifestInfoCollector;
 import com.gmail.heagoo.common.IOUtils;
 import com.gmail.heagoo.common.RefInvoke;
@@ -268,7 +269,7 @@ public class ApkParseThread extends Thread {
             }
             ExtFile extFile = new ExtFile(new File(this.apkPath));
             Directory directory = extFile.getDirectory();
-            this.mApkProtected = !directory.containsDir("res");
+            this.mApkProtected = !ApkResourceLayout.hasStandardResourceFiles(directory);
             if (this.mApkProtected) {
                 if (!directory.containsDir("r")) {
                     if (!directory.containsDir("R")) {
