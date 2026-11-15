@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.view.View;
 import android.widget.Button;
+import android.widget.BaseAdapter;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -170,16 +171,67 @@ public final class ToolManagerActivity extends ThemedActivity {
     }
 
     void m369lambda$render$6$comgmailheagooapkeditorToolManagerActivity() {
-        new AlertDialog.Builder(this).setTitle("Источники инструментов").setMessage("Framework 37 и оригинальные сборки — в составе приложения. AAPT2 37: сборка для Android из проекта vhynlain/aapt2. Framework 33, AAPTz и mycp 2022 — сторонний архив Modder Hub, автор патча указан как HTC 600, точное происхождение бинарников и лицензия архива не установлены. Они экспериментальные. Архив framework проверяется по закреплённому SHA-256.\n\nAndroid 10+ запрещает запуск бинарников из записываемой папки приложения. Поэтому новые ELF не скачиваются и не запускаются из неё. Отдельно упакованные ARM32-инструменты доступны лишь когда установлена ARM32-версия приложения; на устройствах только с ARM64 недоступны. Фактическая работоспособность зависит от устройства.\n\nИсточники:\nhttps://github.com/modder-hub/ApkEditor_Patches_V2\nhttps://github.com/vhynlain/aapt2\nhttps://developer.android.com/tools/aapt2").setPositiveButton("Понятно", (DialogInterface.OnClickListener) null).show();
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Источники и ограничения")
+                .setMessage("Что уже входит в APK Editor Plus\nFramework Android 17 (API 37), основные инструменты и сборки приложены к приложению. AAPT2 37 собран из открытого проекта vhynlain/aapt2.\n\nЧто является сторонним\nFramework Android 13 (API 33), AAPTz и mycp 2022 взяты из архива Modder Hub. Их происхождение, лицензии и совместимость полностью не подтверждены. Используйте их только если понимаете риск. Архив framework и сам framework проверяются по контрольным суммам SHA-256.\n\nПочему некоторые инструменты недоступны\nAndroid 10 и новее ограничивает запуск новых исполняемых файлов из папки данных приложения. Поэтому приложение не скачивает туда новые ELF-файлы для запуска. Некоторые старые инструменты собраны только для ARM32 и не работают в установленной ARM64-версии приложения.\n\nПроверка версий\nПроверка сообщает сведения о доступных версиях, но ничего не устанавливает и не меняет автоматически.\n\nИсточники:\nModder Hub: github.com/modder-hub/ApkEditor_Patches_V2\nAAPT2 Android: github.com/vhynlain/aapt2\nДокументация Android: developer.android.com/tools/aapt2")
+                .setPositiveButton("Понятно", (DialogInterface.OnClickListener) null).create();
+        dialog.setOnShowListener(ignored -> {
+            TextView message = dialog.findViewById(android.R.id.message);
+            if (message != null) {
+                message.setTextSize(14);
+                message.setLineSpacing(dp(3), 1.0f);
+            }
+        });
+        dialog.show();
+    }
+
+    /** Palette-aware selectable cards instead of the platform's flat legacy choice rows. */
+    private void showChoiceDialog(String title, String[] labels, DialogInterface.OnClickListener listener) {
+        final int cardAttr = R.attr.labCardBackground;
+        final android.util.TypedValue card = new android.util.TypedValue();
+        getTheme().resolveAttribute(cardAttr, card, true);
+        final int textColor = com.gmail.heagoo.common.ThemeColors.color(this, R.attr.labText);
+        BaseAdapter adapter = new BaseAdapter() {
+            @Override public int getCount() { return labels.length; }
+            @Override public Object getItem(int position) { return labels[position]; }
+            @Override public long getItemId(int position) { return position; }
+            @Override public View getView(int position, View convertView, android.view.ViewGroup parent) {
+                TextView row = convertView instanceof TextView ? (TextView) convertView : new TextView(ToolManagerActivity.this);
+                int inset = dp(14);
+                row.setText(labels[position]);
+                row.setTextColor(textColor);
+                row.setTextSize(16);
+                row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                row.setPadding(inset, dp(12), inset, dp(12));
+                row.setMinHeight(dp(56));
+                row.setFocusable(false);
+                if (card.resourceId != 0) row.setBackgroundResource(card.resourceId);
+                else row.setBackgroundColor(com.gmail.heagoo.common.ThemeColors.color(ToolManagerActivity.this, R.attr.labSurfaceAlt));
+                return row;
+            }
+        };
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(title).setAdapter(adapter, listener)
+                .setNegativeButton("Отмена", (DialogInterface.OnClickListener) null).create();
+        dialog.setOnShowListener(ignored -> {
+            android.widget.ListView list = dialog.getListView();
+            list.setDivider(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+            list.setDividerHeight(dp(8));
+            list.setPadding(dp(8), dp(4), dp(8), dp(4));
+            list.setClipToPadding(false);
+        });
+        dialog.show();
+    }
+
+    private int dp(int value) {
+        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
     private void choose(String title, String[] labels, final String[] values, final String key) {
-        new AlertDialog.Builder(this).setTitle(title).setItems(labels, new DialogInterface.OnClickListener() {
+        showChoiceDialog(title, labels, new DialogInterface.OnClickListener() {
             @Override
             public final void onClick(DialogInterface dialogInterface, int i) {
                 ToolManagerActivity.this.m356lambda$choose$7$comgmailheagooapkeditorToolManagerActivity(key, values, dialogInterface, i);
             }
-        }).setNegativeButton("Отмена", (DialogInterface.OnClickListener) null).show();
+        });
     }
 
     void m356lambda$choose$7$comgmailheagooapkeditorToolManagerActivity(String key, String[] values, DialogInterface d, int i) {
@@ -189,12 +241,12 @@ public final class ToolManagerActivity extends ThemedActivity {
     public void aapt() {
         String[] labels = {"Прежний AAPT", "AAPT2 (Android 9+)", "AAPT2 37 (Android 11+)", "AAPTz 2022 • сторонний, только ARM32"};
         final String[] vals = {"legacy", "aapt2", "aapt2-37", "aaptz-2022"};
-        new AlertDialog.Builder(this).setTitle("Сборщик ресурсов").setItems(labels, new DialogInterface.OnClickListener() {
+        showChoiceDialog("Сборщик ресурсов", labels, new DialogInterface.OnClickListener() {
             @Override
             public final void onClick(DialogInterface dialogInterface, int i) {
                 ToolManagerActivity.this.m355lambda$aapt$9$comgmailheagooapkeditorToolManagerActivity(vals, dialogInterface, i);
             }
-        }).setNegativeButton("Отмена", (DialogInterface.OnClickListener) null).show();
+        });
     }
 
     void m355lambda$aapt$9$comgmailheagooapkeditorToolManagerActivity(final String[] vals, DialogInterface d, final int i) {
@@ -223,12 +275,12 @@ public final class ToolManagerActivity extends ThemedActivity {
     public void cp() {
         String[] labels = {"Прежний встроенный mycp (ARM32, может не запускаться)", "Системный /system/bin/cp", "mycp 2022 • сторонний, только ARM32"};
         final String[] vals = {"legacy", "system", "2022"};
-        new AlertDialog.Builder(this).setTitle("Копирование данных").setItems(labels, new DialogInterface.OnClickListener() {
+        showChoiceDialog("Копирование данных", labels, new DialogInterface.OnClickListener() {
             @Override
             public final void onClick(DialogInterface dialogInterface, int i) {
                 ToolManagerActivity.this.m358lambda$cp$11$comgmailheagooapkeditorToolManagerActivity(vals, dialogInterface, i);
             }
-        }).setNegativeButton("Отмена", (DialogInterface.OnClickListener) null).show();
+        });
     }
 
     void m358lambda$cp$11$comgmailheagooapkeditorToolManagerActivity(final String[] vals, DialogInterface d, final int i) {
@@ -253,12 +305,12 @@ public final class ToolManagerActivity extends ThemedActivity {
     public void framework() {
         final boolean have = ToolFramework.installed(this).isFile();
         String[] options = {"Android 17 / API 37 • встроен", "Android 13 / API 33 • сторонний" + (have ? " • установлен" : " • скачать и установить")};
-        new AlertDialog.Builder(this).setTitle("Ресурсный framework").setItems(options, new DialogInterface.OnClickListener() {
+        showChoiceDialog("Ресурсный framework", options, new DialogInterface.OnClickListener() {
             @Override
             public final void onClick(DialogInterface dialogInterface, int i) {
                 ToolManagerActivity.this.m360x9c40e250(have, dialogInterface, i);
             }
-        }).setNegativeButton("Отмена", (DialogInterface.OnClickListener) null).show();
+        });
     }
 
     void m360x9c40e250(boolean have, DialogInterface d, int i) {

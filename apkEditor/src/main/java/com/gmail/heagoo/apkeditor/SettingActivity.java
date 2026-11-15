@@ -11,6 +11,9 @@ import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.PreferenceCategory;
 import android.preference.PreferenceManager;
+import android.view.View;
+import android.widget.BaseAdapter;
+import android.widget.TextView;
 import android.widget.Toast;
 import com.gmail.heagoo.apkeditor.ProcessingDialog;
 import com.gmail.heagoo.apkeditor.base.R;
@@ -181,9 +184,33 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
         });
     }
 
+    private android.app.AlertDialog.Builder cardChoices(String title, String[] labels,
+            android.content.DialogInterface.OnClickListener listener) {
+        android.util.TypedValue card = new android.util.TypedValue();
+        getTheme().resolveAttribute(R.attr.labCardBackground, card, true);
+        int textColor = com.gmail.heagoo.common.ThemeColors.color(this, R.attr.labText);
+        BaseAdapter adapter = new BaseAdapter() {
+            @Override public int getCount() { return labels.length; }
+            @Override public Object getItem(int position) { return labels[position]; }
+            @Override public long getItemId(int position) { return position; }
+            @Override public View getView(int position, View convertView, android.view.ViewGroup parent) {
+                TextView row = convertView instanceof TextView ? (TextView) convertView : new TextView(SettingActivity.this);
+                int pad = (int) (14 * getResources().getDisplayMetrics().density + 0.5f);
+                row.setText(labels[position]);
+                row.setTextColor(textColor);
+                row.setTextSize(16);
+                row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                row.setPadding(pad, pad, pad, pad);
+                row.setMinHeight((int) (56 * getResources().getDisplayMetrics().density + 0.5f));
+                if (card.resourceId != 0) row.setBackgroundResource(card.resourceId);
+                return row;
+            }
+        };
+        return new android.app.AlertDialog.Builder(this).setTitle(title).setAdapter(adapter, listener);
+    }
+
     private void showLocalAiModelMenu() {
-        new android.app.AlertDialog.Builder(this).setTitle(R.string.ai_models)
-                .setItems(new String[]{getString(R.string.ai_download), getString(R.string.ai_download_stronger),
+        cardChoices(getString(R.string.ai_models), new String[]{getString(R.string.ai_download), getString(R.string.ai_download_stronger),
                         getString(R.string.ai_download_4gb), getString(R.string.ai_import), getString(R.string.ai_select_model)}, (dialog, which) -> {
                     if (which == 0) confirmRecommendedModelDownload();
                     else if (which == 1) confirmGemma4Download();
@@ -211,8 +238,8 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
             names[i] = models[i].getName() + " (" + android.text.format.Formatter.formatFileSize(this, models[i].length()) + ")";
             if (models[i].getName().equals(selected)) checked = i;
         }
-        new android.app.AlertDialog.Builder(this).setTitle(R.string.ai_select_model)
-                .setSingleChoiceItems(names, checked, (d, which) -> {
+        for (int i = 0; i < names.length; i++) if (i == checked) names[i] = "✓  " + names[i];
+        cardChoices(getString(R.string.ai_select_model), names, (d, which) -> {
                     boolean ok = com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.select(this, models[which].getName());
                     if (ok) d.dismiss();
                     else android.widget.Toast.makeText(this, R.string.ai_model_import_failed, android.widget.Toast.LENGTH_LONG).show();
