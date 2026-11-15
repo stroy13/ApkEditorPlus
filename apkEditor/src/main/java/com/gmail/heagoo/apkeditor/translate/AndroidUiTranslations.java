@@ -50,6 +50,12 @@ public final class AndroidUiTranslations {
         add(result, "abc_menu_space_shortcut_label", "space", "Пробел");
         add(result, "abc_menu_enter_shortcut_label", "enter", "Ввод");
         add(result, "abc_menu_delete_shortcut_label", "delete", "Delete");
+        add(result, "copy", "Copy", "Копировать");
+        add(result, "default_error_message", "Invalid input", "Недопустимые данные");
+        add(result, "fingerprint_error_no_fingerprint", "No fingerprints are enrolled", "Отпечатки пальцев не добавлены");
+        add(result, "fingerprint_error_hw_not_present", "This device does not have a fingerprint sensor", "На устройстве нет датчика отпечатков пальцев");
+        add(result, "fingerprint_error_hw_not_available", "Fingerprint hardware not available", "Сканер отпечатков пальцев недоступен");
+        add(result, "fingerprint_error_lockout", "Too many attempts. Please try again later.", "Слишком много попыток. Повторите попытку позже.");
         return Collections.unmodifiableMap(result);
     }
     private static void add(Map<String, Entry> map, String name, String source, String translated) {
