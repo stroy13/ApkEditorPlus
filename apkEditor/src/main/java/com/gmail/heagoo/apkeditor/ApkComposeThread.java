@@ -14,6 +14,7 @@ import com.gmail.heagoo.apkeditor.ce.IDescriptionUpdate;
 import com.gmail.heagoo.apkeditor.smali.ISmaliAssembleCallback;
 import com.gmail.heagoo.apkeditor.util.Aapt2Pipeline;
 import com.gmail.heagoo.apkeditor.util.Aapt2ResourceTypes;
+import com.gmail.heagoo.apkeditor.util.MissingResourceAttributes;
 import com.gmail.heagoo.apkeditor.util.BundledFrameworkFiles;
 import com.gmail.heagoo.apkeditor.util.SignHelper;
 import com.gmail.heagoo.apkeditor.util.ComposeBuildTrace;
@@ -706,7 +707,10 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
             String[] command1 = {selectedAapt, "package", "-f", "-I", selectedFramework, "-S", this.decodedFilePath + "/res", "-M", this.decodedFilePath + "/AndroidManifest.xml", "-F", this.tempApkPath};
             String[] command2 = {selectedAapt, "package", "-f", "-I", selectedFramework, "-S", this.decodedFilePath + "/res", "-M", this.decodedFilePath + "/AndroidManifest.xml", "-F", this.tempApkPath, "--no-version-vectors"};
             CommandRunner cr = new CommandRunner();
-            boolean ret = cr.runCommand(noVersionVectorOption ? command2 : command1, (String[]) null, (String) null, 300000, true);
+            boolean ret = MissingResourceAttributes.runLegacyAaptWithRetry(cr,
+                    noVersionVectorOption ? command2 : command1, this.decodedFilePath + "/res",
+                    this.decodedFilePath + "/AndroidManifest.xml",
+                    this.buildTrace == null ? null : this.buildTrace.logger());
             LOGGER.info("stdout: " + cr.getStdOut() + ", ret=" + ret);
             if (ret) {
                 return true;

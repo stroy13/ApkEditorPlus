@@ -74,12 +74,12 @@ public final class Aapt2Pipeline {
                 runTimed(linkArgs, logger);
             } catch (IOException strictFailure) {
                 String manifestXml = new String(Files.readAllBytes(new File(manifest).toPath()), java.nio.charset.StandardCharsets.UTF_8);
-                Set<String> missingAttributes = Aapt2MissingAttributes.find(strictFailure.getMessage(), manifestXml);
+                Set<String> missingAttributes = MissingResourceAttributes.find(strictFailure.getMessage(), manifestXml);
                 if (!missingAttributes.isEmpty()) {
                     if (out.exists() && !out.delete()) throw new IOException("Cannot remove failed AAPT2 output", strictFailure);
                     missingAttributeStage = Files.createTempDirectory(out.getAbsoluteFile().getParentFile().toPath(), "aapt2-attrs-");
                     Aapt2DummyResources.stage(new File(compileDir).toPath(), missingAttributeStage, Collections.<Path, byte[]>emptyMap());
-                    Aapt2MissingAttributes.writeDeclarations(missingAttributeStage, missingAttributes);
+                    MissingResourceAttributes.writeDeclarations(missingAttributeStage, missingAttributes);
                     if (logger != null) logger.log("AAPT2: undeclared app attributes " + missingAttributes + "; adding temporary declarations and retrying link");
                     if (flat.exists() && !flat.delete()) throw new IOException("Cannot remove failed AAPT2 intermediates", strictFailure);
                     try {

@@ -10,6 +10,7 @@ import com.gmail.heagoo.apkeditor.ce.IDescriptionUpdate;
 import com.gmail.heagoo.apkeditor.smali.ISmaliAssembleCallback;
 import com.gmail.heagoo.apkeditor.util.Aapt2Pipeline;
 import com.gmail.heagoo.apkeditor.util.Aapt2ResourceTypes;
+import com.gmail.heagoo.apkeditor.util.MissingResourceAttributes;
 import com.gmail.heagoo.apkeditor.util.SignHelper;
 import com.gmail.heagoo.apkeditor.util.ComposeBuildTrace;
 import com.gmail.heagoo.apkeditor.util.ModifiedTree;
@@ -527,7 +528,10 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
             }
             System.currentTimeMillis();
             CommandRunner cr = new CommandRunner();
-            boolean ret = cr.runCommand(paramList.toArray(new String[paramList.size()]), (String[]) null, (String) null, 300000, true);
+            boolean ret = MissingResourceAttributes.runLegacyAaptWithRetry(cr,
+                    paramList.toArray(new String[paramList.size()]), this.decodedFilePath + "/res",
+                    this.decodedFilePath + "/AndroidManifest.xml",
+                    this.buildTrace == null ? null : this.buildTrace.logger());
             LOGGER.info("stdout: " + cr.getStdOut() + ", ret=" + ret);
             if (ret) {
                 return true;
