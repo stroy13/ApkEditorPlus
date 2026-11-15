@@ -15,6 +15,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import com.gmail.heagoo.apkeditor.base.R;
 import com.gmail.heagoo.apkeditor.util.ToolFramework;
 import com.gmail.heagoo.apkeditor.util.ToolUpdateChecker;
 import java.io.File;
