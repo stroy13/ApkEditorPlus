@@ -10,6 +10,12 @@ import java.net.URL;
 public final class LocalModelDownload {
     private LocalModelDownload() {}
     public static File download(String link, String sha256, File directory, LocalModelStore.Progress progress) throws IOException {
+        return downloadInternal(link, sha256, directory, progress, true);
+    }
+    public static File downloadBundle(String link, String sha256, File directory, LocalModelStore.Progress progress) throws IOException {
+        return downloadInternal(link, sha256, directory, progress, false);
+    }
+    private static File downloadInternal(String link, String sha256, File directory, LocalModelStore.Progress progress, boolean gguf) throws IOException {
         if (sha256 == null || !sha256.matches("[0-9a-fA-F]{64}")) throw new IOException("Missing model checksum");
         URL url = new URL(link);
         for (int redirects = 0; redirects <= 8; redirects++) {
@@ -31,7 +37,9 @@ public final class LocalModelDownload {
                 if (status != 200) throw new IOException("Download HTTP " + status);
                 long size = c.getContentLengthLong();
                 try (InputStream in = c.getInputStream()) {
-                    return LocalModelStore.importModel(in, directory, size, sha256, progress);
+                    return gguf
+                            ? LocalModelStore.importModel(in, directory, size, sha256, progress)
+                            : LocalModelStore.importVerifiedBundle(in, directory, size, sha256, progress);
                 }
             } finally { c.disconnect(); }
         }

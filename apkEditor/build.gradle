@@ -53,6 +53,7 @@ dependencies {
 
     implementation 'com.google.guava:guava:31.1-jre'
     implementation 'com.google.mlkit:translate:17.0.3'
+    implementation 'com.google.ai.edge.litertlm:litertlm-android:0.19.1'
 
     implementation 'androidx.viewpager:viewpager:1.0.0'
     implementation 'androidx.interpolator:interpolator:1.0.0'

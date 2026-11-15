@@ -1,10 +1,10 @@
-# APK Editor Plus v1.10.0.251
+# APK Editor Plus v1.10.0.253
 
 [![Сборка](https://github.com/stroy13/test_mod/actions/workflows/build.yml/badge.svg)](https://github.com/stroy13/test_mod/actions/workflows/build.yml)
 
 Полноценный форк Android-приложения **APK Editor Plus** (`ru.apkeditor.plus`)
 с собственными исправлениями и развитием кодовой базы. Актуальная версия —
-**251** / **1.10.0.251**, история изменений — в [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
+**253** / **1.10.0.253**, история изменений — в [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
 Проект собирается штатным Gradle: `:apkEditorPlus:assembleDebug` →
 `apkEditorPlus/build/outputs/apk/debug/apkEditorPlus-debug.apk`.
@@ -15,12 +15,12 @@
 | Параметр | Значение |
 |---|---|
 | Package / applicationId | `ru.apkeditor.plus` |
-| versionCode / versionName | `251` / `1.10.0.251` (см. [`docs/CHANGELOG.md`](docs/CHANGELOG.md)) |
+| versionCode / versionName | `253` / `1.10.0.253` (см. [`docs/CHANGELOG.md`](docs/CHANGELOG.md)) |
 | minSdk / targetSdk / compileSdk | 26 / 37 / 37 |
 | Gradle / AGP | 9.8.2 / 9.5.1 |
 | JDK | 17 |
 | NDK | 30.0.16248370 (ndkBuild, ABI: `armeabi-v7a`, `arm64-v8a`) |
-| Язык | Java (828 файлов), нативный код C/C++ в `jni/` |
+| Язык | Java и Kotlin (локальный LiteRT-LM inference), нативный код C/C++ в `jni/` |
 
 ## Структура проекта
 
@@ -129,3 +129,7 @@ applicationId уже давно `ru.apkeditor.plus`. Начиная с 186 мо�
 ## Локальный перевод с Google ML Kit
 
 При выборе «Перевести с Google» приложение использует локальную модель Google Translate через [ML Kit](https://developers.google.com/ml-kit/language/translation). Языковые модели загружаются после согласия пользователя; после загрузки перевод выполняется на устройстве. Машинный перевод предоставляется как есть и требует проверки человеком. [Условия и атрибуция Google](https://developers.google.com/ml-kit/language/translation/translation-terms).
+
+### Локальный ИИ-перевод
+
+В настройках можно скачать рекомендуемую Gemma 3 1B INT4 (около 584 МБ) либо импортировать совместимый файл `.litertlm`. Загрузка встроена в приложение, выполняется по HTTPS и проверяется по закреплённому SHA-256. После загрузки модель работает локально: API-ключи не нужны, строки перевода не отправляются в облако. Gemma требует около 1 ГБ памяти во время работы и распространяется по [условиям Gemma](https://ai.google.dev/gemma/terms) и [политике запрещённого использования](https://ai.google.dev/gemma/prohibited_use_policy). Модель размещена в стороннем GitHub-зеркале; перед загрузкой приложение показывает это предупреждение. Перевод экспериментальный — сначала проверьте несколько строк и отредактируйте результат.
