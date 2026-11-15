@@ -14,6 +14,7 @@ import com.gmail.heagoo.apkeditor.ApkDecoderMine;
 import com.gmail.heagoo.apkeditor.base.R;
 import com.gmail.heagoo.apkeditor.smali.ResSmaliIdProvider;
 import com.gmail.heagoo.apkeditor.util.ApkResourceLayout;
+import com.gmail.heagoo.apkeditor.util.ZipPathSanitizer;
 import com.gmail.heagoo.apklib.ManifestInfoCollector;
 import com.gmail.heagoo.common.IOUtils;
 import com.gmail.heagoo.common.RefInvoke;
@@ -33,6 +34,7 @@ public class ApkParseThread extends Thread {
     private WeakReference<Activity> activityRef;
     private ResPackage apkPackage;
     private String apkPath;
+    private File sanitizedApkFile;
     private volatile boolean cancelled;
     private WeakReference<ApkParseConsumer> consumerRef;
     private String decodeRootPath;
@@ -214,6 +216,8 @@ public class ApkParseThread extends Thread {
             }
         } finally {
             this.finished = true;
+            File sanitized = this.sanitizedApkFile;
+            if (sanitized != null) sanitized.delete();
         }
         if (!success) {
             reportFailure(this.errMessage);
@@ -267,7 +271,10 @@ public class ApkParseThread extends Thread {
                 bArr3 = new byte[97];
                 readAssetFile(activity, "dummy.9.png", bArr3);
             }
-            ExtFile extFile = new ExtFile(new File(this.apkPath));
+            File sourceApk = new File(this.apkPath);
+            File safeApk = ZipPathSanitizer.sanitize(sourceApk, activity.getCacheDir());
+            if (!safeApk.equals(sourceApk)) this.sanitizedApkFile = safeApk;
+            ExtFile extFile = new ExtFile(safeApk);
             Directory directory = extFile.getDirectory();
             this.mApkProtected = !ApkResourceLayout.hasStandardResourceFiles(directory);
             if (this.mApkProtected) {
