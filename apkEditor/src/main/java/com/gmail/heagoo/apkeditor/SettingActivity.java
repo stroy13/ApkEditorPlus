@@ -183,9 +183,11 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
 
     private void showLocalAiModelMenu() {
         new android.app.AlertDialog.Builder(this).setTitle(R.string.ai_models)
-                .setItems(new String[]{getString(R.string.ai_download), getString(R.string.ai_import), getString(R.string.ai_select_model)}, (dialog, which) -> {
+                .setItems(new String[]{getString(R.string.ai_download), getString(R.string.ai_download_stronger),
+                        getString(R.string.ai_import), getString(R.string.ai_select_model)}, (dialog, which) -> {
                     if (which == 0) confirmRecommendedModelDownload();
-                    else if (which == 1) {
+                    else if (which == 1) confirmGemma4Download();
+                    else if (which == 2) {
                         Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                         pick.addCategory(Intent.CATEGORY_OPENABLE);
                         pick.setType("*/*");
@@ -225,15 +227,29 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
                     try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://ai.google.dev/gemma/terms"))); }
                     catch (Exception e) { android.widget.Toast.makeText(this, R.string.ai_model_import_failed, android.widget.Toast.LENGTH_LONG).show(); }
                 })
-                .setPositiveButton(R.string.ai_download, (d, w) -> downloadRecommendedModel())
+                .setPositiveButton(R.string.ai_download, (d, w) -> downloadLocalModel(false))
                 .create();
         dialog.show();
     }
 
-    private void downloadRecommendedModel() {
+    private void confirmGemma4Download() {
+        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.ai_gemma4_confirm_title)
+                .setMessage(R.string.ai_gemma4_confirm)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setNeutralButton(R.string.ai_license, (d, w) -> {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://ai.google.dev/gemma/terms"))); }
+                    catch (Exception e) { android.widget.Toast.makeText(this, R.string.ai_model_import_failed, android.widget.Toast.LENGTH_LONG).show(); }
+                })
+                .setPositiveButton(R.string.ai_download_stronger, (d, w) -> downloadLocalModel(true))
+                .create();
+        dialog.show();
+    }
+
+    private void downloadLocalModel(boolean stronger) {
         java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
         android.app.ProgressDialog progress = new android.app.ProgressDialog(this);
-        progress.setTitle(R.string.ai_download);
+        progress.setTitle(stronger ? R.string.ai_download_stronger : R.string.ai_download);
         progress.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
         progress.setMax(1000);
         progress.setIndeterminate(false);
@@ -246,8 +262,7 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
         new Thread(() -> {
             boolean ok = false;
             try {
-                com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.downloadRecommended(getApplicationContext(),
-                        new com.gmail.heagoo.apkeditor.translate.LocalModelStore.Progress() {
+                com.gmail.heagoo.apkeditor.translate.LocalModelStore.Progress transfer = new com.gmail.heagoo.apkeditor.translate.LocalModelStore.Progress() {
                             private long total;
                             @Override public boolean isCancelled() { return cancelled.get(); }
                             @Override public void onTotal(long bytes) {
@@ -262,7 +277,9 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
                                             (int) (bytes / (1024 * 1024)), (int) (max / (1024 * 1024))));
                                 });
                             }
-                        });
+                        };
+                if (stronger) com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.downloadGemma4E2B(getApplicationContext(), transfer);
+                else com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.downloadRecommended(getApplicationContext(), transfer);
                 ok = true;
             } catch (Exception e) { android.util.Log.e("SettingActivity", "Local AI model download failed", e); }
             final boolean downloaded = ok;

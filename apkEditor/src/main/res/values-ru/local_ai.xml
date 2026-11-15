@@ -11,13 +11,16 @@
     <string name="ai_model_missing">Сначала импортируйте локальную ИИ-модель в настройках.</string>
     <string name="ai_litert_action">Перевести локальным ИИ</string>
     <string name="ai_litert_consent">Выбранная модель работает на устройстве. Перевод может быть медленным и потреблять много памяти и заряда. Продолжить?</string>
-    <string name="ai_models_description">Выбрана: %1$s\n\nСкачайте рекомендуемую модель размером 584 МБ прямо в приложении или импортируйте совместимый файл .litertlm. Модели хранятся в закрытой папке и работают офлайн. Поддерживаются только совместимые модели LiteRT-LM.</string>
+    <string name="ai_models_description">Выбрана: %1$s\n\nСкачайте Gemma 3 1B (584 МБ), более сильную Gemma 4 E2B (2,6 ГБ) или импортируйте совместимый файл .litertlm. Модели хранятся в закрытой папке и работают офлайн. Для большой модели требуется около 4 ГБ рабочей памяти. Поддерживаются только совместимые модели LiteRT-LM.</string>
     <string name="ai_none">Модель не выбрана</string>
     <string name="ai_choose">Выбрать импортированную модель</string>
     <string name="ai_import">Импортировать модель LiteRT-LM с устройства</string>
     <string name="ai_select_model">Выбрать установленную модель</string>
     <string name="ai_no_installed_models">Локальные модели ещё не установлены.</string>
     <string name="ai_download">Скачать рекомендуемую модель</string>
+    <string name="ai_download_stronger">Скачать более сильную Gemma 4 E2B (2,6 ГБ)</string>
+    <string name="ai_gemma4_confirm_title">Скачать Gemma 4 E2B (INT4)?</string>
+    <string name="ai_gemma4_confirm">Скачать около 2,6 ГБ по HTTPS двумя проверяемыми частями? Во время установки потребуется не менее 4 ГБ свободного места и около 4 ГБ рабочей памяти. Модель хранится в закрытой папке приложения и работает офлайн. Действуют условия Gemma. Контрольные суммы частей проверяются; файлы размещены в зеркале стороннего разработчика. APK Editor Plus не связан с Google.</string>
     <string name="ai_delete">Удалить импортированную модель</string>
     <string name="ai_delete_confirm">Удалить %1$s?</string>
     <string name="ai_delete_failed">Не удалось удалить модель</string>

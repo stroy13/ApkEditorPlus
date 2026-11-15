@@ -11,13 +11,16 @@
     <string name="ai_model_missing">Import a local AI model in Settings first.</string>
     <string name="ai_litert_action">Translate with local AI</string>
     <string name="ai_litert_consent">The selected model runs on this device. Translation may be slow and use substantial memory and battery. Continue?</string>
-    <string name="ai_models_description">Selected: %1$s\n\nDownload the recommended 584 MB model in the app or import a compatible .litertlm file. Models are stored privately and run offline. Only compatible LiteRT-LM bundles are supported.</string>
+    <string name="ai_models_description">Selected: %1$s\n\nDownload Gemma 3 1B (584 MB), the stronger Gemma 4 E2B (2.6 GB), or import a compatible .litertlm file. Models are stored privately and run offline. The larger model needs about 4 GB working memory. Only compatible LiteRT-LM bundles are supported.</string>
     <string name="ai_none">No model selected</string>
     <string name="ai_choose">Choose an imported model</string>
     <string name="ai_import">Import LiteRT-LM model from device</string>
     <string name="ai_select_model">Choose an installed model</string>
     <string name="ai_no_installed_models">No local models installed yet.</string>
     <string name="ai_download">Get a recommended model</string>
+    <string name="ai_download_stronger">Download stronger Gemma 4 E2B (2.6 GB)</string>
+    <string name="ai_gemma4_confirm_title">Download Gemma 4 E2B (INT4)?</string>
+    <string name="ai_gemma4_confirm">Download about 2.6 GB over HTTPS in two verified parts? Allow at least 4 GB free storage during setup and about 4 GB working memory. The model is stored privately and runs offline. Gemma Terms apply. The checksummed model parts are mirrored by a third party; APK Editor Plus is not affiliated with Google.</string>
     <string name="ai_delete">Delete an imported model</string>
     <string name="ai_delete_confirm">Delete %1$s?</string>
     <string name="ai_delete_failed">Could not delete model</string>
