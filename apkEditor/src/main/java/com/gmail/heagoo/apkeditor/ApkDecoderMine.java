@@ -260,6 +260,14 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
         ResFileValue fileValue = (ResFileValue) res.getValue();
         String inFileName = fileValue.getStrippedPath();
         String outResName = res.getFilePath();
+        // Protected APKs can point resource-table entries at absolute ZIP names
+        // (e.g. /AndroidManifest.xml/  .xml). Android's ZipEntry rejects these;
+        // ignore the bogus resource instead of aborting the entire APK decode.
+        if (!ordinaryPath(inFileName) || !ordinaryPath(outResName)) {
+            LOGGER.warning("Skipping invalid protected APK resource path: " + inFileName);
+            res.replace(new ResBoolValue(false, 0, null));
+            return;
+        }
         String typeName = res.getResSpec().getType().getName();
 
         String ext = null;
