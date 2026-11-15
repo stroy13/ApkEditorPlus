@@ -369,6 +369,8 @@ public class ApkParseThread extends Thread {
                 return z;
             }
         } catch (Exception e5) {
+            Log.e("ApkParse", "APK failed before resource decoding started", e5);
+            this.errMessage = e5.getMessage() != null ? e5.getMessage() : e5.toString();
             z = false;
         }
         return z;

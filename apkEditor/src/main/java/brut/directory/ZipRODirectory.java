@@ -115,6 +115,14 @@ public class ZipRODirectory extends AbstractDirectory {
             }
 
             String subname = name.substring(prefixLen);
+            // Malformed APKs may contain repeated separators (for example
+            // res/values/strings.xml///foo.xml). Creating a child for an empty
+            // segment would point back to this same path and recurse forever in
+            // getFiles(true)/getDirs(true). Ignore entries with empty components.
+            if (subname.length() == 0 || subname.charAt(0) == separator
+                    || subname.contains("//")) {
+                continue;
+            }
 
             int pos = subname.indexOf(separator);
             if (pos == -1) {
