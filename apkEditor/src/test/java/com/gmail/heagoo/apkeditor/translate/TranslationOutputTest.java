@@ -32,9 +32,11 @@ public class TranslationOutputTest {
         assertTrue(TranslationOutput.hasVisibleContent("Готово"));
     }
     @Test public void rejectsPromptInstructionsLeakedByModel() {
-        try { TranslationOutput.clean("Expand", "The previous answer was invalid. Output visible translated text only."); fail(); }
-        catch (TranslationRejectedException expected) { assertEquals(TranslationRejectedException.Reason.REASONING, expected.reason()); }
-        catch (IOException unexpected) { fail(unexpected.toString()); }
+        for (String junk : new String[]{"The previous answer was invalid. Output visible translated text only.", "Ресурс: abc_search_hint"}) {
+            try { TranslationOutput.clean("Expand", junk); fail(junk); }
+            catch (TranslationRejectedException expected) { assertEquals(TranslationRejectedException.Reason.REASONING, expected.reason()); }
+            catch (IOException unexpected) { fail(unexpected.toString()); }
+        }
     }
     @Test public void recognizesCyrillicOutput() {
         assertTrue(TranslationOutput.containsCyrillic("Перейти вверх"));

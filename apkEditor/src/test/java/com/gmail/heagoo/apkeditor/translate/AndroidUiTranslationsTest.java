@@ -6,6 +6,8 @@ import static org.junit.Assert.*;
 public class AndroidUiTranslationsTest {
     @Test public void recognizesOnlyUnmodifiedKnownAndroidXStrings() {
         assertEquals("Готово", AndroidUiTranslations.find("en", "ru", "abc_action_mode_done", "Done"));
+        assertEquals("Готово", AndroidUiTranslations.find("-en-rXC", "-ru", "abc_action_mode_done", "Done"));
+        assertEquals("Введите запрос", AndroidUiTranslations.find("English", "Russian", "abc_search_hint", "Search..."));
         assertEquals("Перейти вверх", AndroidUiTranslations.find("en", "ru", "abc_action_bar_up_description", "Navigate up"));
         assertEquals("Fn +", AndroidUiTranslations.find("en", "ru", "abc_menu_function_shortcut_label", "Function+"));
         assertEquals("Копировать", AndroidUiTranslations.find("en", "ru", "copy", "Copy"));

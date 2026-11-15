@@ -68,9 +68,24 @@ public final class AndroidUiTranslations {
     }
     /** Returns null for other languages, modified strings and unknown resources. */
     public static String find(String sourceLanguage, String targetLanguage, String name, String source) {
-        if (!"en".equals(sourceLanguage) || !"ru".equals(targetLanguage) || name == null || source == null) return null;
+        if (!"en".equals(languageCode(sourceLanguage)) || !"ru".equals(languageCode(targetLanguage))
+                || name == null || source == null) return null;
         Entry entry = EN_RU.get(name);
-        return entry != null && entry.source.equals(source) && TranslationTokens.preserved(source, entry.translated)
-                ? entry.translated : null;
+        if (entry == null) return null;
+        boolean exact = entry.source.equals(source);
+        // AndroidX bundles appear with both the Unicode ellipsis and three ASCII dots.
+        if (!exact && "abc_search_hint".equals(name)) exact = "Search...".equals(source);
+        return exact && TranslationTokens.preserved(source, entry.translated) ? entry.translated : null;
+    }
+
+    private static String languageCode(String value) {
+        if (value == null) return null;
+        String tag = value.trim();
+        if (tag.startsWith("-") && tag.matches("-[A-Za-z]{2,3}(?:-r[A-Za-z]{2,3})?"))
+            return ResourceLanguageTag.languageOnlyFromQualifier(tag);
+        String lower = tag.toLowerCase(java.util.Locale.ROOT);
+        if (lower.equals("english") || lower.equals("английский") || lower.equals("английский язык")) return "en";
+        if (lower.equals("russian") || lower.equals("русский") || lower.equals("русский язык")) return "ru";
+        return java.util.Locale.forLanguageTag(tag).getLanguage();
     }
 }
