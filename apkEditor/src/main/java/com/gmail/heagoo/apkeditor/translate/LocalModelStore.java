@@ -26,6 +26,17 @@ public final class LocalModelStore {
     /** A known length/hash is verified before the temporary file is made visible. */
     public static File importModel(InputStream input, File directory, long expectedBytes,
                                    String sha256, Progress progress) throws IOException {
+        return importFile(input, directory, expectedBytes, sha256, progress, true, ".gguf");
+    }
+
+    /** Stores a checksum-pinned non-GGUF model bundle (for example LiteRT-LM). */
+    public static File importVerifiedBundle(InputStream input, File directory, long expectedBytes,
+                                            String sha256, Progress progress) throws IOException {
+        return importFile(input, directory, expectedBytes, sha256, progress, false, ".litertlm.part");
+    }
+
+    private static File importFile(InputStream input, File directory, long expectedBytes,
+                                   String sha256, Progress progress, boolean validateGguf, String extension) throws IOException {
         if (input == null || directory == null) throw new IllegalArgumentException();
         if (progress != null) progress.onTotal(expectedBytes);
         if (!directory.isDirectory() && !directory.mkdirs() && !directory.isDirectory())
@@ -48,8 +59,8 @@ public final class LocalModelStore {
             }
             int version = (header[4] & 255) | ((header[5] & 255) << 8)
                     | ((header[6] & 255) << 16) | ((header[7] & 255) << 24);
-            if (header[0] != 'G' || header[1] != 'G' || header[2] != 'U'
-                    || header[3] != 'F' || (version != 2 && version != 3))
+            if (validateGguf && (header[0] != 'G' || header[1] != 'G' || header[2] != 'U'
+                    || header[3] != 'F' || (version != 2 && version != 3)))
                 throw new IOException("Unsupported GGUF header or version");
             long count = header.length;
             digest.update(header);
@@ -75,7 +86,7 @@ public final class LocalModelStore {
                 out.getFD().sync();
             }
             checkCancelled(progress);
-            File target = new File(directory, UUID.randomUUID().toString() + ".gguf");
+            File target = new File(directory, UUID.randomUUID().toString() + extension);
             if (target.exists() || !temp.renameTo(target)) throw new IOException("Cannot store model");
             committed = true;
             return target;

@@ -20,6 +20,17 @@ public class LocalModelStoreTest {
         assertArrayEquals(data, Files.readAllBytes(a.toPath()));
         assertArrayEquals(data, Files.readAllBytes(b.toPath()));
     }
+    @Test public void checksumVerifiedLiteRtBundleDoesNotRequireGgufMagic() throws Exception {
+        byte[] data = new byte[]{'L','I','T','E','R','T','L','M',4,3,2,1};
+        java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+        StringBuilder hex = new StringBuilder();
+        for (byte b : digest.digest(data)) hex.append(String.format("%02x", b & 255));
+        java.io.File model = LocalModelStore.importVerifiedBundle(
+                new ByteArrayInputStream(data), folder.getRoot(), data.length, hex.toString(), null);
+        assertTrue(model.getName().endsWith(".litertlm.part"));
+        assertArrayEquals(data, Files.readAllBytes(model.toPath()));
+    }
+
     @Test public void invalidAndTruncatedHeadersLeaveNoFiles() throws Exception {
         for (byte[] data : new byte[][]{{'G','G','U','F'}, {'G','G','U','F',1,0,0,0}, {'N','O','P','E',3,0,0,0}}) {
             try { LocalModelStore.importModel(new ByteArrayInputStream(data), folder.getRoot()); fail(); }

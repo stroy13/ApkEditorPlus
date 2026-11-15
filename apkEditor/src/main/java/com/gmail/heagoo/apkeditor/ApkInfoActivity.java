@@ -3123,6 +3123,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
     private boolean useLocalTranslation;
     private boolean useGoogleTranslation;
     private boolean useFoxletTranslation;
+    private boolean useLiteRtTranslation;
     private String googleSourceLanguage;
     private String localTranslationSource;
     private java.util.concurrent.atomic.AtomicBoolean localTranslationCancellation;
@@ -3156,15 +3157,20 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
 
     public void startNewTranslation() {
         boolean plugin = generalTranslatePluginExist(this) || proTranslatePluginExist();
+        boolean hasLiteRtModel = com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.selected(this) != null;
         java.util.ArrayList<String> options = new java.util.ArrayList<>();
-        options.add(getString(R.string.ai_google_action));
-        options.add(getString(R.string.ai_foxlet_action));
-        if (plugin) options.add(getString(R.string.translate_plugin));
+        java.util.ArrayList<Integer> actions = new java.util.ArrayList<>();
+        options.add(getString(R.string.ai_google_action)); actions.add(0);
+        options.add(getString(R.string.ai_foxlet_action)); actions.add(1);
+        if (hasLiteRtModel) { options.add(getString(R.string.ai_litert_action)); actions.add(2); }
+        if (plugin) { options.add(getString(R.string.translate_plugin)); actions.add(3); }
         new AlertDialog.Builder(this).setTitle(R.string.ai_translate_title)
                 .setItems(options.toArray(new String[0]), (dialog, which) -> {
-                    useGoogleTranslation = which == 0;
-                    useFoxletTranslation = which == 1;
-                    useLocalTranslation = which < 2;
+                    int action = actions.get(which);
+                    useGoogleTranslation = action == 0;
+                    useFoxletTranslation = action == 1;
+                    useLiteRtTranslation = action == 2;
+                    useLocalTranslation = action != 3;
                     if (useFoxletTranslation && (android.os.Build.VERSION.SDK_INT < 28 || !android.os.Process.is64Bit()
                             || !java.util.Arrays.asList(android.os.Build.SUPPORTED_64_BIT_ABIS).contains("arm64-v8a"))) {
                         new AlertDialog.Builder(this).setMessage(R.string.ai_foxlet_unsupported_device).setPositiveButton(android.R.string.ok, null).show();
@@ -3280,6 +3286,13 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                     .show();
             return;
         }
+        if (useLiteRtTranslation) {
+            new AlertDialog.Builder(this).setMessage(R.string.ai_litert_consent)
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(R.string.ai_litert_action, (dialog, which) -> runLocalTranslationConfirmed(qualifier, sample, null))
+                    .show();
+            return;
+        }
         runLocalTranslationConfirmed(qualifier, sample, null);
     }
 
@@ -3290,6 +3303,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         List<StringItem> source = com.gmail.heagoo.apkeditor.translate.TranslationSource.selected(allStringValues, localTranslationSource);
         final boolean googleEngine = useGoogleTranslation;
         final boolean foxletEngine = useFoxletTranslation;
+        final boolean liteRtEngine = useLiteRtTranslation;
         final String googleSource = googleSourceLanguage;
         if (source == null || source.isEmpty()) {
             Toast.makeText(this, R.string.ai_no_source, Toast.LENGTH_LONG).show(); return;
@@ -3312,10 +3326,13 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         final String sourceQualifier = localTranslationSource;
         com.gmail.heagoo.apkeditor.translate.TranslationTrace trace = new com.gmail.heagoo.apkeditor.translate.TranslationTrace(
                 snapshot.size(), 0, 0, sample, qualifier);
-        com.gmail.heagoo.apkeditor.translate.TranslationDiagnostics diagnostics = new com.gmail.heagoo.apkeditor.translate.TranslationDiagnostics(this, trace, googleEngine, foxletEngine, googleSource, googleTarget);
+        String diagnosticSource = liteRtEngine ? localSourceName(sourceQualifier) : googleSource;
+        String diagnosticTarget = liteRtEngine ? targetLanguage : googleTarget;
+        com.gmail.heagoo.apkeditor.translate.TranslationDiagnostics diagnostics = new com.gmail.heagoo.apkeditor.translate.TranslationDiagnostics(
+                this, trace, googleEngine, foxletEngine, liteRtEngine, diagnosticSource, diagnosticTarget);
         diagnostics.save();
         android.app.ProgressDialog progress = new android.app.ProgressDialog(this);
-        progress.setTitle(googleEngine ? R.string.ai_google_action : R.string.ai_foxlet_action);
+        progress.setTitle(googleEngine ? R.string.ai_google_action : liteRtEngine ? R.string.ai_litert_action : R.string.ai_foxlet_action);
         progress.setMessage(getString(R.string.ai_loading));
         progress.setCancelable(false);
         java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -3361,8 +3378,10 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             ArrayList<String> rejectedNames = new ArrayList<>();
             java.util.Map<String, com.gmail.heagoo.apkeditor.translate.TranslationRejectedException.Reason> rejectedCache = new java.util.HashMap<>();
             String failure = null;
-            try (com.gmail.heagoo.apkeditor.translate.TranslationSession engine =
-                    foxletEngine
+            try (com.gmail.heagoo.apkeditor.translate.TranslationSession engine = liteRtEngine
+                    ? new com.gmail.heagoo.apkeditor.translate.LiteRtLmInference(
+                            com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.selected(getApplicationContext()), trace, cancelled)
+                    : foxletEngine
                             ? new com.gmail.heagoo.apkeditor.translate.FoxletInference(getApplicationContext(), foxletTag(googleSource), foxletTag(googleTarget), trace, cancelled)
                             : new com.gmail.heagoo.apkeditor.translate.GoogleMlInference(googleSource, googleTarget, trace, cancelled)) {
                 localEngine.set(engine);
@@ -3384,13 +3403,23 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                                 trace.stringStart(item.value.length(), 0);
                                 throw new com.gmail.heagoo.apkeditor.translate.TranslationRejectedException(prior, "Previously rejected");
                             }
-                            String translated = com.gmail.heagoo.apkeditor.translate.AndroidUiTranslations.find(
-                                    googleSource, googleTarget, item.name, item.value);
+                            String translated = com.gmail.heagoo.apkeditor.translate.TranslationMemory.find(
+                                    this, googleSource, googleTarget, item.value);
                             if (translated != null) {
                                 trace.stringStart(item.value.length(), 0);
+                                trace.translationCacheHit();
                                 trace.stage(com.gmail.heagoo.apkeditor.translate.TranslationTrace.Stage.VALIDATE);
                                 translated = com.gmail.heagoo.apkeditor.translate.TranslationOutput.clean(item.value, translated);
                             } else {
+                                translated = com.gmail.heagoo.apkeditor.translate.AndroidUiTranslations.find(
+                                        googleSource, googleTarget, item.name, item.value);
+                                if (translated != null) {
+                                    trace.stringStart(item.value.length(), 0);
+                                    trace.stage(com.gmail.heagoo.apkeditor.translate.TranslationTrace.Stage.VALIDATE);
+                                    translated = com.gmail.heagoo.apkeditor.translate.TranslationOutput.clean(item.value, translated);
+                                }
+                            }
+                            if (translated == null) {
                                 translated = translationCache.get(cacheKey);
                                 if (translated == null) {
                                     translated = engine.translate(item.value, targetLanguage, sourceQualifier, item.name);
@@ -3431,6 +3460,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                 if (error != null) { new AlertDialog.Builder(this).setTitle(R.string.ai_translate_title).setMessage(error)
                         .setNeutralButton(R.string.ai_copy_log, (d, w) -> diagnostics.copy(this))
                         .setPositiveButton(android.R.string.ok, null).show(); return; }
+                java.util.Map<String, String> machineTranslations = new java.util.HashMap<>(translatedValues);
                 TranslationReviewDialog.show(this, snapshot, result, translatedValues, rejectedNames, sample, googleEngine,
                         () -> diagnostics.copy(this), closeReview -> {
                             File targetDir = new File(decodeRootPath, "res/values" + qualifier);
@@ -3438,16 +3468,28 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                                 new AlertDialog.Builder(this).setMessage(R.string.ai_replace_confirm)
                                         .setNegativeButton(android.R.string.cancel, null)
                                         .setPositiveButton(R.string.ai_replace, (confirm, ignored) -> {
-                                            try { updateExistingTranslation(qualifier, translatedValues); closeReview.run(); Toast.makeText(this, R.string.ai_saved, Toast.LENGTH_LONG).show(); }
+                                            try { updateExistingTranslation(qualifier, translatedValues); rememberReviewedTranslations(snapshot, machineTranslations, translatedValues, googleSource, googleTarget); closeReview.run(); Toast.makeText(this, R.string.ai_saved, Toast.LENGTH_LONG).show(); }
                                             catch (Exception e) { new AlertDialog.Builder(this).setMessage(e.toString()).setPositiveButton(android.R.string.ok, null).show(); }
                                         }).show();
                             } else {
-                                try { saveTranslatedLanguage(qualifier, result); closeReview.run(); Toast.makeText(this, R.string.ai_saved, Toast.LENGTH_LONG).show(); }
+                                try { saveTranslatedLanguage(qualifier, result); rememberReviewedTranslations(snapshot, machineTranslations, translatedValues, googleSource, googleTarget); closeReview.run(); Toast.makeText(this, R.string.ai_saved, Toast.LENGTH_LONG).show(); }
                                 catch (Exception e) { Toast.makeText(this, e.toString(), Toast.LENGTH_LONG).show(); }
                             }
                         });
             });
         }, "local-ai-translate").start();
+    }
+
+    /** Keep only deliberate review edits as a local exact-match glossary for later translations. */
+    private void rememberReviewedTranslations(List<StringItem> source, Map<String, String> machine,
+                                             Map<String, String> reviewed, String sourceLanguage,
+                                             String targetLanguage) {
+        for (StringItem item : source) {
+            String value = reviewed.get(item.name);
+            if (value == null || value.equals(item.value) || value.equals(machine.get(item.name))) continue;
+            com.gmail.heagoo.apkeditor.translate.TranslationMemory.remember(
+                    getApplicationContext(), sourceLanguage, targetLanguage, item.value, value);
+        }
     }
 
     /** Update only translated scalar strings, leaving target-only and skipped resources intact. */

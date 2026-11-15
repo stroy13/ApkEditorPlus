@@ -168,12 +168,113 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
         } else {
             android.util.Log.w("SettingActivity", "NotificationSettings preference is missing");
         }
+        Preference localAiModel = findPreference("LocalAiModel");
+        if (localAiModel != null) localAiModel.setOnPreferenceClickListener(pref -> {
+            showLocalAiModelMenu();
+            return true;
+        });
         findPreference("ToolManager").setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
             @Override
             public final boolean onPreferenceClick(Preference preference) {
                 return SettingActivity.this.m291lambda$onCreate$0$comgmailheagooapkeditorSettingActivity(preference);
             }
         });
+    }
+
+    private void showLocalAiModelMenu() {
+        new android.app.AlertDialog.Builder(this).setTitle(R.string.ai_models)
+                .setItems(new String[]{getString(R.string.ai_download), getString(R.string.ai_import)}, (dialog, which) -> {
+                    if (which == 0) confirmRecommendedModelDownload();
+                    else {
+                        Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                        pick.addCategory(Intent.CATEGORY_OPENABLE);
+                        pick.setType("*/*");
+                        startActivityForResult(pick, 9274);
+                    }
+                }).setNegativeButton(android.R.string.cancel, null).show();
+    }
+
+    private void confirmRecommendedModelDownload() {
+        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.ai_download_confirm_title)
+                .setMessage(R.string.ai_download_confirm)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setNeutralButton(R.string.ai_license, (d, w) -> {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://ai.google.dev/gemma/terms"))); }
+                    catch (Exception e) { android.widget.Toast.makeText(this, R.string.ai_model_import_failed, android.widget.Toast.LENGTH_LONG).show(); }
+                })
+                .setPositiveButton(R.string.ai_download, (d, w) -> downloadRecommendedModel())
+                .create();
+        dialog.show();
+    }
+
+    private void downloadRecommendedModel() {
+        java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
+        android.app.ProgressDialog progress = new android.app.ProgressDialog(this);
+        progress.setTitle(R.string.ai_download);
+        progress.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+        progress.setMax(1000);
+        progress.setIndeterminate(false);
+        progress.setCancelable(false);
+        progress.setButton(android.content.DialogInterface.BUTTON_NEGATIVE, getString(android.R.string.cancel), (d, w) -> {
+            cancelled.set(true);
+            progress.setMessage(getString(R.string.ai_cancelling));
+        });
+        progress.show();
+        new Thread(() -> {
+            boolean ok = false;
+            try {
+                com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.downloadRecommended(getApplicationContext(),
+                        new com.gmail.heagoo.apkeditor.translate.LocalModelStore.Progress() {
+                            private long total;
+                            @Override public boolean isCancelled() { return cancelled.get(); }
+                            @Override public void onTotal(long bytes) {
+                                total = bytes;
+                                runOnUiThread(() -> progress.setMessage(getString(R.string.ai_progress_bytes_total, 0, (int) (bytes / (1024 * 1024)))));
+                            }
+                            @Override public void onBytes(long bytes) {
+                                long max = total;
+                                runOnUiThread(() -> {
+                                    if (max > 0) progress.setProgress((int) Math.min(1000, bytes * 1000 / max));
+                                    progress.setMessage(getString(R.string.ai_progress_bytes_total,
+                                            (int) (bytes / (1024 * 1024)), (int) (max / (1024 * 1024))));
+                                });
+                            }
+                        });
+                ok = true;
+            } catch (Exception e) { android.util.Log.e("SettingActivity", "Local AI model download failed", e); }
+            final boolean downloaded = ok;
+            runOnUiThread(() -> {
+                progress.dismiss();
+                android.widget.Toast.makeText(this, downloaded ? R.string.ai_model_downloaded : R.string.ai_transfer_error,
+                        android.widget.Toast.LENGTH_LONG).show();
+            });
+        }, "local-model-download").start();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != 9274 || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        final android.net.Uri uri = data.getData();
+        new Thread(() -> {
+            boolean ok = false;
+            try {
+                android.database.Cursor cursor = getContentResolver().query(uri, new String[]{"_display_name"}, null, null, null);
+                String name = null;
+                if (cursor != null) {
+                    try { if (cursor.moveToFirst()) name = cursor.getString(0); }
+                    finally { cursor.close(); }
+                }
+                if (name == null || !name.toLowerCase(java.util.Locale.ROOT).endsWith(".litertlm"))
+                    throw new java.io.IOException("Expected a .litertlm model file");
+                com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.importModel(getApplicationContext(), uri);
+                ok = true;
+            } catch (Exception e) { android.util.Log.e("SettingActivity", "Local AI model import failed", e); }
+            final boolean imported = ok;
+            runOnUiThread(() -> android.widget.Toast.makeText(this,
+                    imported ? R.string.ai_model_imported : R.string.ai_model_import_failed, android.widget.Toast.LENGTH_LONG).show());
+        }, "local-model-import").start();
     }
 
     boolean m291lambda$onCreate$0$comgmailheagooapkeditorSettingActivity(Preference pref) {

@@ -52,7 +52,7 @@ jobs:
             python3 -c 'import glob,xml.etree.ElementTree as E; [print("::error title=Test failure::" + (f.get("message", "") or "unknown")) for p in glob.glob("*/build/test-results/testDebugUnitTest/TEST-*.xml") for f in E.parse(p).iter("failure")]'
             tail -n 60 /tmp/test.log
             echo "--- AAPT/resource errors"
-            grep -n -E "error:|AAPT|Android resource linking failed|\.xml:[0-9]+" /tmp/test.log | head -n 100 || true
+            grep -n -E "error:|AAPT|Android resource linking failed|\.xml:[0-9]+|e: .*\.kt:[0-9]+|w: .*\.kt:[0-9]+|Unresolved reference" /tmp/test.log | head -n 160 || true
             for report in _AndroidCommon/build/test-results/testDebugUnitTest/TEST-*.xml appListUtil/build/test-results/testDebugUnitTest/TEST-*.xml appDataEditor/build/test-results/testDebugUnitTest/TEST-*.xml httpServer/build/test-results/testDebugUnitTest/TEST-*.xml apkEditor/build/test-results/testDebugUnitTest/TEST-*.xml apkEditorPlus/build/test-results/testDebugUnitTest/TEST-*.xml; do
               if [ -f "$report" ]; then
                 echo "--- $report"

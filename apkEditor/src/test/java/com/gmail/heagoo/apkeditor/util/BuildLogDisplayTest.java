@@ -12,6 +12,14 @@ public class BuildLogDisplayTest {
         assertEquals("[t +2 мс] error: /tmp/123 ms/foo", BuildLogDisplay.render("[t +2ms] error: /tmp/123 ms/foo", "ru"));
         assertEquals("[t +1 min 1.234 s] Total elapsed: 1 min 1.234 s", BuildLogDisplay.render("[t +61234ms] Total elapsed: 61234 ms", "en"));
     }
+    @Test public void translatesBuildAndPackageStatusWithoutChangingValues() {
+        assertEquals("[t] AAPT: найдены необъявленные атрибуты приложения [glance_isTopLevelLayout]; повторяем сборку с временными объявлениями атрибутов",
+                BuildLogDisplay.render("[t] AAPT: undeclared app attributes [glance_isTopLevelLayout]; retrying with temporary declarations", "ru"));
+        assertEquals("[t] Подпись APK успешно завершена", BuildLogDisplay.render("[t] SignHelper finished successfully", "ru"));
+        assertEquals("[t] Готовый APK: /tmp/gen.apk (144 байта)", BuildLogDisplay.render("[t] Published target: /tmp/gen.apk (144 bytes)", "ru"));
+        assertEquals("[t] Проверка APK пройдена: пакет=org.example.app, код версии=12, версия=2.1",
+                BuildLogDisplay.render("[t] Android package parser OK: package=org.example.app, versionCode=12, versionName=2.1", "ru"));
+    }
     @Test public void displaysStagesButPreservesPathsAndDiagnostics() {
         assertEquals("[10 +2 мс] Начало этапа: компиляция classes.dex", BuildLogDisplay.render("[10 +2ms] Compose stage start: assemble classes.dex", "ru"));
         assertEquals("[t] Добавление в APK: res/merge.xml: sourceMethod=STORED", BuildLogDisplay.render("[t] merge res/merge.xml: sourceMethod=STORED", "ru"));

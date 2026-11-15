@@ -1,15 +1,24 @@
 <resources>
-    <string name="ai_models">Локальные ИИ-модели (экспериментально)</string>
-    <string name="ai_models_summary">Выбор, импорт и удаление GGUF-моделей для офлайн-перевода.</string>
-    <string name="ai_models_description">Выбрана: %1$s\n\nМодели скачиваются во внутреннее хранилище приложения. При импорте файла создаётся копия, поэтому потребуется дополнительное место. Наличие заголовка GGUF не гарантирует совместимость. Перевод экспериментальный.</string>
+    <string name="ai_models">Модель ИИ-перевода на устройстве</string>
+    <string name="ai_models_summary">Импорт модели LiteRT-LM для приватного ИИ-перевода без интернета.</string>
+    <string name="ai_model_picker_title">Выберите файл модели .litertlm</string>
+    <string name="ai_model_imported">Локальная ИИ-модель импортирована и останется на устройстве.</string>
+    <string name="ai_model_import_failed">Не удалось импортировать модель LiteRT-LM.</string>
+    <string name="ai_download_confirm_title">Скачать Gemma 3 1B (INT4)?</string>
+    <string name="ai_download_confirm">Скачать модель размером 584 МБ по HTTPS? SHA-256 файла проверяется, модель хранится в закрытом хранилище приложения и требует около 1 ГБ оперативной памяти при работе. На Gemma распространяются Условия использования Gemma и политика запрещённого использования Google. Файл модели размещён в зеркале стороннего релиза GitHub; APK Editor Plus не связан с Google.</string>
+    <string name="ai_license">Условия лицензии</string>
+    <string name="ai_model_downloaded">Модель скачана и выбрана. Она останется на устройстве.</string>
+    <string name="ai_model_missing">Сначала импортируйте локальную ИИ-модель в настройках.</string>
+    <string name="ai_litert_action">Перевести локальным ИИ</string>
+    <string name="ai_litert_consent">Выбранная модель работает на устройстве. Перевод может быть медленным и потреблять много памяти и заряда. Продолжить?</string>
+    <string name="ai_models_description">Выбрана: %1$s\n\nСкачайте рекомендуемую модель размером 584 МБ прямо в приложении или импортируйте совместимый файл .litertlm. Модели хранятся в закрытой папке и работают офлайн. Поддерживаются только совместимые модели LiteRT-LM.</string>
     <string name="ai_none">Модель не выбрана</string>
     <string name="ai_choose">Выбрать импортированную модель</string>
-    <string name="ai_import">Импортировать GGUF с устройства</string>
+    <string name="ai_import">Импортировать модель LiteRT-LM с устройства</string>
     <string name="ai_download">Скачать рекомендуемую модель</string>
     <string name="ai_delete">Удалить импортированную модель</string>
     <string name="ai_delete_confirm">Удалить %1$s?</string>
     <string name="ai_delete_failed">Не удалось удалить модель</string>
-    <string name="ai_download_confirm">Скачать %1$s непосредственно в хранилище приложения? Нужны интернет и свободное место. Целостность проверяется по SHA-256. Ознакомьтесь с лицензией модели на Hugging Face.</string>
     <string name="ai_preparing">Подготовка…</string>
     <string name="ai_cancelling">Отмена…</string>
     <string name="ai_cancelled">Передача отменена.</string>
@@ -19,7 +28,7 @@
     <string name="ai_importing">Импорт модели, подождите…</string>
     <string name="ai_translate_title">Перевод локальным ИИ</string>
     <string name="ai_local">Локальный ИИ</string>
-    <string name="ai_choose_first">Сначала импортируйте и выберите GGUF-модель в настройках.</string>
+    <string name="ai_choose_first">Сначала скачайте или импортируйте модель LiteRT-LM в настройках.</string>
     <string name="ai_existing_language">Этот язык уже существует. Чтобы не перезаписать имеющийся перевод, полный перевод можно сохранить только как новый язык. Выберите другой язык назначения.</string>
     <string name="ai_no_source">Не найдены строки выбранного исходного языка или модель.</string>
     <string name="ai_default_source">Язык по умолчанию (основные строки)</string>
@@ -50,7 +59,7 @@
     <string name="ai_replace">Заменить</string>
     <string name="ai_pending_target">Сначала сохраните или разрешите отложенные изменения языка назначения.</string>
     <string name="ai_rejected_note">Не удалось безопасно перевести строк: %1$d. В существующем языке прежние переводы сохранятся, в новом — останется исходный текст. Имена ресурсов (первые 20):</string>
-    <string name="ai_review_hint">Ниже показаны все строки. Нажмите на строку, чтобы исправить её перед сохранением. Форматированные строки и ссылки не изменяются.</string>
+    <string name="ai_review_hint">Ниже показаны все строки. Нажмите на строку, чтобы исправить перевод. Ваши правки сохраняются только на устройстве и будут использоваться для такого же текста и языковой пары. Форматированные строки и ссылки не изменяются.</string>
     <string name="ai_review_source">Исходный текст: %1$s</string>
     <string name="ai_review_result">Результат: %1$s</string>
     <string name="ai_review_rejected">Не переведено — нажмите для исправления; иначе существующий перевод сохранится</string>
