@@ -78,6 +78,23 @@ public class FastXmlSerializer implements XmlSerializer {
     private boolean seenBracket;
     private boolean seenBracketBracket;
 
+    private static String safeXmlName(String name) {
+        if (name == null || name.length() == 0) return "unknown";
+        char first = name.charAt(0);
+        if (!(Character.isLetter(first) || first == '_' || first == ':')) return invalidXmlName(name);
+        for (int i = 1; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (!(Character.isLetterOrDigit(c) || c == '_' || c == ':' || c == '-' || c == '.')) {
+                return invalidXmlName(name);
+            }
+        }
+        return name;
+    }
+
+    private static String invalidXmlName(String name) {
+        return "obfuscated_" + Integer.toHexString(name.hashCode());
+    }
+
     private void append(char c) throws IOException {
         int pos = mPos;
         if (pos >= (BUFFER_LEN - 1)) {
@@ -178,10 +195,11 @@ public class FastXmlSerializer implements XmlSerializer {
     public XmlSerializer attribute(String namespace, String name, String value)
             throws IOException, IllegalArgumentException, IllegalStateException {
         // Modified by Pujiang, omit the null value
-        if (value == null) {
+        if (value == null || name == null || name.length() == 0) {
             return this;
         }
 
+        name = safeXmlName(name);
         append(' ');
         if (namespace != null && !namespace.equals("")) {
             // Modified by Pujiang, NOT use the uri as namespace
@@ -233,7 +251,13 @@ public class FastXmlSerializer implements XmlSerializer {
             String namespace = namespaces[i];
             String name = names[i];
             String value = values[i];
+            // Protected manifests can contain unresolved/obfuscated attributes.
+            // Do not let a null name/value abort decoding of the whole APK.
+            if (name == null || name.length() == 0 || value == null) {
+                continue;
+            }
 
+            name = safeXmlName(name);
             String key = name;
             if (namespace != null && !namespace.equals("")) {
                 //String real = uri2Namespace.get(namespace);
@@ -287,6 +311,7 @@ public class FastXmlSerializer implements XmlSerializer {
 
     public XmlSerializer endTag(String namespace, String name)
             throws IOException, IllegalArgumentException, IllegalStateException {
+        name = safeXmlName(name);
         nsMgr.depthEnded(mDepth);
         mDepth--;
         if (mInTag) {
@@ -488,6 +513,7 @@ public class FastXmlSerializer implements XmlSerializer {
         for (int i = 0; i < mDepth; i++) {
             append('\t');
         }
+        name = safeXmlName(name);
         append('<');
         if (namespace != null) {
             //String real = uri2Namespace.get(namespace);
