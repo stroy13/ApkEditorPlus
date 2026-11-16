@@ -325,6 +325,22 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
             outFileName = outResName + ext;
         }
 
+        // Malformed protected resource tables can map a resource below a path that
+        // is already a regular file (for example AndroidManifest.xml/.xml). Such
+        // entries cannot be represented in the decoded tree and ZipFile reports
+        // "Invalid zip entry path" when the resource is copied. Ignore the bad
+        // resource rather than aborting the whole APK decode.
+        File outputFile = new File(outDir, outFileName);
+        File outputParent = outputFile.getParentFile();
+        while (outputParent != null && !outputParent.equals(outDir)) {
+            if (outputParent.isFile()) {
+                LOGGER.warning("Skipping protected resource below file path: " + outFileName);
+                res.replace(new ResBoolValue(false, 0, null));
+                return;
+            }
+            outputParent = outputParent.getParentFile();
+        }
+
         LOGGER.info("decoding " + outFileName);
 
         try {
