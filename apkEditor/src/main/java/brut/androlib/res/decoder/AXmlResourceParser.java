@@ -865,12 +865,14 @@ public class AXmlResourceParser implements XmlResourceParser {
                 m_styleAttribute = (m_classAttribute >>> 16) - 1;
                 m_classAttribute = (m_classAttribute & 0xFFFF) - 1;
                 if (attributeStart < 20 || attributeSize < ATTRIBUTE_LENGTH * 4
-                        || (attributeSize % 4) != 0
                         || (long) chunkHeaderSize + attributeStart
                         + (long) attributeCount * attributeSize > chunkSize) {
                     throw new IOException("Invalid attribute layout (start=" + attributeStart
                             + ", size=" + attributeSize + ").");
                 }
+                // Protector-generated attributes may use byte strides that are not
+                // 4-byte aligned (for example 26 bytes); the standard five fields
+                // still occupy the first 20 bytes of each record.
                 int attributePadding = attributeStart - 20;
                 if (attributePadding > 0 && m_reader.skipBytes(attributePadding) != attributePadding) {
                     throw new IOException("Truncated attribute extension");
