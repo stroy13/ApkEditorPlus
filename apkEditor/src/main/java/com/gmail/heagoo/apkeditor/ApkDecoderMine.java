@@ -21,6 +21,7 @@ import brut.util.KXmlSerializer;
 import com.gmail.heagoo.apkeditor.XmlDecoder;
 import com.gmail.heagoo.apkeditor.util.TimeDumper;
 import com.gmail.heagoo.apkeditor.util.ApkResourceLayout;
+import com.gmail.heagoo.apkeditor.util.ProtectedDexExtractor;
 import com.gmail.heagoo.apklib.AXMLParser;
 import com.gmail.heagoo.common.FileUtil;
 import com.gmail.heagoo.neweditor.Encoding;
@@ -231,6 +232,12 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
     private void decodeDexFiles(ExtFile apkFile, File outDir) throws AndrolibException {
         try {
             Directory in = apkFile.getDirectory();
+            if (ProtectedDexExtractor.isSupported(in)) {
+                // Replace the tiny bootstrap classes.dex with the actual DEX payloads
+                // that the protector loads from assets at runtime.
+                ProtectedDexExtractor.extract(in, outDir);
+                return;
+            }
             for (String file : in.getFiles(false)) {
                 if (file.matches("classes([2-9]|[1-9][0-9]+)?\\.dex")) {
                     in.copyToDir(outDir, file);
@@ -238,6 +245,8 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
             }
         } catch (DirectoryException ex) {
             throw new AndrolibException("Could not copy DEX files", ex);
+        } catch (IOException ex) {
+            throw new AndrolibException("Could not decode protected DEX files", ex);
         }
     }
 
