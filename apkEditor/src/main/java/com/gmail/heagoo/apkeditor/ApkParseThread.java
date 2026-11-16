@@ -435,11 +435,12 @@ public class ApkParseThread extends Thread {
                 }
                 break;
         }
-        if (this.apkPackage == null && this.mApkProtected && pkgs.length > 0) {
-            // Resource protectors may prepend several decoy package chunks. The real
-            // app package is normally the one carrying the largest resource table;
-            // selecting it keeps strings and public resources available instead of
-            // treating the whole protected table as ambiguous.
+        if (this.apkPackage == null && pkgs.length > 0) {
+            // Some protected APKs retain the standard ZIP filenames, so
+            // mApkProtected alone cannot identify them. Their resource table may
+            // contain many decoy package chunks; select the manifest package when
+            // possible, otherwise choose the package with the most resource specs.
+            // This is also a safe fallback for ordinary APKs with extra package chunks.
             if (this.manifestPackageName != null) {
                 for (ResPackage candidate : pkgs) {
                     if (candidate != null && this.manifestPackageName.equals(candidate.getName())) {
