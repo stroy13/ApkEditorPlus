@@ -876,13 +876,11 @@ public class AXmlResourceParser implements XmlResourceParser {
                 // chunk; otherwise fall back to the standard start immediately after
                 // the attribute extension.
                 int effectiveAttributeStart = attributeStart;
-                if (effectiveAttributeStart < 20 || effectiveAttributeStart > 32
+                if (effectiveAttributeStart < 20
                         || (long) chunkHeaderSize + effectiveAttributeStart
                         + (long) attributeCount * attributeSize > chunkSize) {
-                    // Android's ordinary attribute extension is 20 bytes. Values
-                    // far beyond that are a common protector decoy; they can still
-                    // fit inside a large chunk and otherwise shift parsing into
-                    // unrelated bytes (producing duplicate manifest attributes).
+                    // Some protectors store attributes at an extended offset. Only
+                    // fall back when the declared records cannot fit in this chunk.
                     effectiveAttributeStart = 20;
                 }
                 int attributePadding = effectiveAttributeStart - 20;
