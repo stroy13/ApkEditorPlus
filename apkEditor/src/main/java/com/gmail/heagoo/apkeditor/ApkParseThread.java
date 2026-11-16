@@ -35,6 +35,7 @@ import java.util.zip.ZipFile;
 public class ApkParseThread extends Thread {
     private WeakReference<Activity> activityRef;
     private ResPackage apkPackage;
+    private String manifestPackageName;
     private String apkPath;
     private File sanitizedApkFile;
     private volatile boolean cancelled;
@@ -293,6 +294,7 @@ public class ApkParseThread extends Thread {
                     ManifestInfoCollector manifestInfoCollector = new ManifestInfoCollector();
                     manifestInfoCollector.parse(fileInput, "manifest", "package");
                     String value = manifestInfoCollector.getValue();
+                    this.manifestPackageName = value;
                     fileInput.close();
                     String makeWorkingDir = SDCard.makeWorkingDir(activity);
                     File workingDir = new File(makeWorkingDir);
@@ -438,7 +440,16 @@ public class ApkParseThread extends Thread {
             // app package is normally the one carrying the largest resource table;
             // selecting it keeps strings and public resources available instead of
             // treating the whole protected table as ambiguous.
+            if (this.manifestPackageName != null) {
+                for (ResPackage candidate : pkgs) {
+                    if (candidate != null && this.manifestPackageName.equals(candidate.getName())) {
+                        this.apkPackage = candidate;
+                        break;
+                    }
+                }
+            }
             for (ResPackage candidate : pkgs) {
+                if (this.apkPackage != null) break;
                 if (candidate == null || "android".equals(candidate.getName())
                         || "com.htc".equals(candidate.getName())) continue;
                 if (this.apkPackage == null

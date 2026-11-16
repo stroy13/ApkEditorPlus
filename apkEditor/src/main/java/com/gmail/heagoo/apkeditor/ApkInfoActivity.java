@@ -155,6 +155,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
     private TextView decodeResultDetail;
     private View decodeResultLayout;
     private TextView decodeResultTitle;
+    private boolean decodeResultExpanded;
     protected String decodeRootPath;
     private ArrayList<String> deletedFiles;
     private ImageView dex2smaliImage;
@@ -1235,6 +1236,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             this.decodeResultTitle = (TextView) findViewById(R.id.decode_result_title);
             this.decodeResultDetail = (TextView) findViewById(R.id.decode_result_detail);
             findViewById(R.id.down_arrow_container).setOnClickListener(this);
+            this.decodeResultTitle.setOnClickListener(this);
         } else {
             this.dexDecodeLayout.setVisibility(8);
         }
@@ -1382,8 +1384,8 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             decodeDex(null);
             return;
         }
-        if (id == R.id.down_arrow_container) {
-            this.dexDecodeLayout.setVisibility(8);
+        if (id == R.id.down_arrow_container || id == R.id.decode_result_title) {
+            setDecodeResultExpanded(!this.decodeResultExpanded);
             return;
         }
         if (id == R.id.menu_rotate) {
@@ -4575,7 +4577,17 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         Toast.makeText((Context) this, (CharSequence) "Manifest editing is disabled (seems not a genuine version)", 1).show();
     }
 
+    private void setDecodeResultExpanded(boolean expanded) {
+        this.decodeResultExpanded = expanded;
+        if (this.decodeResultDetail != null) {
+            this.decodeResultDetail.setVisibility(expanded ? View.VISIBLE : View.GONE);
+        }
+        View arrow = findViewById(R.id.decode_result_arrow);
+        if (arrow != null) arrow.setRotation(expanded ? 180f : 0f);
+    }
+
     public void dexDecodingStarted() {
+        this.decodeResultExpanded = false;
         this.dexConversionInProgress = true;
         this.dex2smaliImage.setVisibility(4);
         this.decodeResultLayout.setVisibility(4);
@@ -4610,7 +4622,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                 this.decodeResultTitle.setText(R.string.succeed_with_warning);
                 String content = getString(R.string.warning) + ": " + strWarning;
                 this.decodeResultDetail.setText(content);
-                this.decodeResultDetail.setVisibility(0);
+                this.decodeResultDetail.setVisibility(View.GONE);
             } else {
                 showResult = false;
                 this.decodeResultTitle.setText(R.string.succeed);
@@ -4618,7 +4630,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             }
         } else {
             this.decodeResultTitle.setText(R.string.failed);
-            this.decodeResultDetail.setVisibility(0);
+            this.decodeResultDetail.setVisibility(View.GONE);
             if (strError != null) {
                 this.decodeResultDetail.setText(strError);
             } else {
@@ -4629,6 +4641,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         this.decodeProgressBar.setVisibility(4);
         this.decodeProgressText.setVisibility(8);
         this.decodeProgressRow.setVisibility(8);
+        setDecodeResultExpanded(false);
         if (showResult) {
             this.decodeResultLayout.setVisibility(0);
         } else {
