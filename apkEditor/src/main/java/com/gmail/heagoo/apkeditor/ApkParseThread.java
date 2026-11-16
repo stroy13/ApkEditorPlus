@@ -433,6 +433,20 @@ public class ApkParseThread extends Thread {
                 }
                 break;
         }
+        if (this.apkPackage == null && this.mApkProtected && pkgs.length > 0) {
+            // Resource protectors may prepend several decoy package chunks. The real
+            // app package is normally the one carrying the largest resource table;
+            // selecting it keeps strings and public resources available instead of
+            // treating the whole protected table as ambiguous.
+            for (ResPackage candidate : pkgs) {
+                if (candidate == null || "android".equals(candidate.getName())
+                        || "com.htc".equals(candidate.getName())) continue;
+                if (this.apkPackage == null
+                        || candidate.getResSpecCount() > this.apkPackage.getResSpecCount()) {
+                    this.apkPackage = candidate;
+                }
+            }
+        }
         if (this.apkPackage == null) {
             throw new AndrolibException("Arsc files with zero or multiple packages");
         }
