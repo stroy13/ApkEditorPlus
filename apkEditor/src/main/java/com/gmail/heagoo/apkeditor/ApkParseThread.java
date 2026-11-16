@@ -14,6 +14,7 @@ import com.gmail.heagoo.apkeditor.ApkDecoderMine;
 import com.gmail.heagoo.apkeditor.base.R;
 import com.gmail.heagoo.apkeditor.smali.ResSmaliIdProvider;
 import com.gmail.heagoo.apkeditor.util.ApkResourceLayout;
+import com.gmail.heagoo.apkeditor.util.ProtectedDexExtractor;
 import com.gmail.heagoo.apkeditor.util.ZipPathSanitizer;
 import com.gmail.heagoo.apklib.ManifestInfoCollector;
 import com.gmail.heagoo.common.IOUtils;
@@ -26,6 +27,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
+import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -292,22 +294,31 @@ public class ApkParseThread extends Thread {
                     manifestInfoCollector.parse(fileInput, "manifest", "package");
                     String value = manifestInfoCollector.getValue();
                     fileInput.close();
-                    InputStream fileInput2 = directory.getFileInput("classes.dex");
                     String makeWorkingDir = SDCard.makeWorkingDir(activity);
-                    String str = makeWorkingDir + "classes.dex";
-                    FileOutputStream fileOutputStream = new FileOutputStream(str);
-                    IOUtils.copy(fileInput2, fileOutputStream);
-                    fileInput2.close();
-                    fileOutputStream.close();
+                    File workingDir = new File(makeWorkingDir);
+                    List<File> dexFiles = ProtectedDexExtractor.isSupported(directory)
+                            ? ProtectedDexExtractor.extract(directory, workingDir)
+                            : new java.util.ArrayList<File>();
+                    if (dexFiles.isEmpty()) {
+                        // Keep the legacy path for protectors that leave their loader DEX
+                        // unencrypted at the archive root.
+                        InputStream fileInput2 = directory.getFileInput("classes.dex");
+                        File loaderDex = new File(workingDir, "classes.dex");
+                        FileOutputStream fileOutputStream = new FileOutputStream(loaderDex);
+                        IOUtils.copy(fileInput2, fileOutputStream);
+                        fileInput2.close();
+                        fileOutputStream.close();
+                        dexFiles.add(loaderDex);
+                    }
                     z = false;
                     z2 = true;
                     try {
-                        try {
-                            RefInvoke.invokeStaticMethod("com.gmail.heagoo.apkeditor.plus.ResourceDecoder", "decodeResources", new Class[]{String.class, String.class}, new Object[]{str, makeWorkingDir});
-                            this.idProvider = new ResSmaliIdProvider(makeWorkingDir, value);
-                        } catch (Exception e) {
+                        for (File dexFile : dexFiles) {
+                            RefInvoke.invokeStaticMethod("com.gmail.heagoo.apkeditor.plus.ResourceDecoder", "decodeResources", new Class[]{String.class, String.class}, new Object[]{dexFile.getAbsolutePath(), makeWorkingDir});
                         }
-                    } catch (Exception e2) {
+                        this.idProvider = new ResSmaliIdProvider(makeWorkingDir, value);
+                    } catch (Exception dexDecodeError) {
+                        Log.w("ApkParse", "Could not extract R classes from protected DEX payload", dexDecodeError);
                     }
                 } catch (Exception e3) {
                     z = false;

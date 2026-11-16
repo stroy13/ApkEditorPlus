@@ -864,16 +864,24 @@ public class AXmlResourceParser implements XmlResourceParser {
                 m_classAttribute = m_reader.readInt();
                 m_styleAttribute = (m_classAttribute >>> 16) - 1;
                 m_classAttribute = (m_classAttribute & 0xFFFF) - 1;
-                if (attributeStart < 20 || attributeSize < ATTRIBUTE_LENGTH * 4
-                        || (long) chunkHeaderSize + attributeStart
+                if (attributeSize < ATTRIBUTE_LENGTH * 4
+                        || (long) chunkHeaderSize + 20
                         + (long) attributeCount * attributeSize > chunkSize) {
                     throw new IOException("Invalid attribute layout (start=" + attributeStart
                             + ", size=" + attributeSize + ").");
                 }
-                // Protector-generated attributes may use byte strides that are not
-                // 4-byte aligned (for example 26 bytes); the standard five fields
-                // still occupy the first 20 bytes of each record.
-                int attributePadding = attributeStart - 20;
+                // Some protectors overwrite attributeStart with a decoy value (99
+                // in APK Editor King V5.0) while retaining the real 26-byte stride.
+                // Honor the offset only when the declared records still fit in this
+                // chunk; otherwise fall back to the standard start immediately after
+                // the attribute extension.
+                int effectiveAttributeStart = attributeStart;
+                if (effectiveAttributeStart < 20
+                        || (long) chunkHeaderSize + effectiveAttributeStart
+                        + (long) attributeCount * attributeSize > chunkSize) {
+                    effectiveAttributeStart = 20;
+                }
+                int attributePadding = effectiveAttributeStart - 20;
                 if (attributePadding > 0 && m_reader.skipBytes(attributePadding) != attributePadding) {
                     throw new IOException("Truncated attribute extension");
                 }
@@ -889,7 +897,7 @@ public class AXmlResourceParser implements XmlResourceParser {
                         throw new IOException("Truncated extended attribute");
                     }
                 }
-                skipChunkRemainder(chunkSize, chunkHeaderSize + attributeStart
+                skipChunkRemainder(chunkSize, chunkHeaderSize + effectiveAttributeStart
                         + attributeCount * attributeSize);
                 for (int i = ATTRIBUTE_IX_VALUE_TYPE; i < m_attributes.length; ) {
                     m_attributes[i] = (m_attributes[i] >>> 24);
