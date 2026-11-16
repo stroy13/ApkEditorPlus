@@ -18,6 +18,18 @@ public class ResourceDecoder {
         return DexFileFactory.loadDexFile(file, Opcodes.forApi(15));
     }
 
+    public static void decodeDex(String dexFilePath, String outputDirectory) throws Exception {
+        DexBackedDexFile dexFile = loadDexFile(dexFilePath);
+        File outputDirectoryFile = new File(outputDirectory);
+        if (!outputDirectoryFile.exists() && !outputDirectoryFile.mkdirs()) {
+            throw new Exception("Can't create the output directory " + outputDirectory);
+        }
+        int jobs = Runtime.getRuntime().availableProcessors();
+        if (!Baksmali_r.disassembleDexFile(dexFile, outputDirectoryFile, jobs, getOptions())) {
+            throw new Exception("Baksmali.disassembleDexFile failed.");
+        }
+    }
+
     public static void decodeResources(String dexFilePath, String outputDirectory) throws Exception {
         DexBackedDexFile dexFile = loadDexFile(dexFilePath);
 

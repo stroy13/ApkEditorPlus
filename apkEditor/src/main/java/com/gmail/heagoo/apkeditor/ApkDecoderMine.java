@@ -234,8 +234,21 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
             Directory in = apkFile.getDirectory();
             if (ProtectedDexExtractor.isSupported(in)) {
                 // Replace the tiny bootstrap classes.dex with the actual DEX payloads
-                // that the protector loads from assets at runtime.
-                ProtectedDexExtractor.extract(in, outDir);
+                // that the protector loads from assets at runtime, and expose their
+                // classes as editable smali source in the project.
+                List<File> payloads = ProtectedDexExtractor.extract(in, outDir);
+                for (File dex : payloads) {
+                    File smaliDir = new File(outDir, smaliDirectoryName(dex.getName()));
+                    try {
+                        Class<?> decoder = Class.forName(
+                                "com.gmail.heagoo.apkeditor.plus.ResourceDecoder");
+                        decoder.getMethod("decodeDex", String.class, String.class)
+                                .invoke(null, dex.getAbsolutePath(), smaliDir.getAbsolutePath());
+                    } catch (Exception decodeError) {
+                        LOGGER.warning("Could not disassemble protected DEX " + dex.getName()
+                                + ": " + decodeError);
+                    }
+                }
                 return;
             }
             for (String file : in.getFiles(false)) {
@@ -248,6 +261,15 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
         } catch (IOException ex) {
             throw new AndrolibException("Could not decode protected DEX files", ex);
         }
+    }
+
+    private static String smaliDirectoryName(String dexName) {
+        if ("classes.dex".equals(dexName)) return "smali";
+        if (dexName.matches("classes(?:[2-9]|[1-9][0-9]+)\\.dex")) {
+            return "smali_classes" + dexName.substring("classes".length(),
+                    dexName.length() - ".dex".length());
+        }
+        return "smali";
     }
 
     private void generatePublicXml(File outDir) throws AndrolibException {

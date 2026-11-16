@@ -26,6 +26,28 @@ import java.util.concurrent.Future;
 import javax.annotation.Nullable;
 
 public class Baksmali_r {
+    public static boolean disassembleDexFile(DexFile dexFile, File outputDir, int jobs,
+                                            BaksmaliOptions options) {
+        List<ClassDef> targets = new ArrayList<>(dexFile.getClasses());
+        if (targets.isEmpty()) return true;
+        List<? extends ClassDef> classDefs = Ordering.natural().sortedCopy(targets);
+        final ClassFileNameHandler fileNameHandler = new ClassFileNameHandler(outputDir, ".smali");
+        ExecutorService executor = Executors.newFixedThreadPool(Math.max(1, jobs));
+        List<Future<Boolean>> tasks = Lists.newArrayList();
+        for (final ClassDef classDef : classDefs) {
+            tasks.add(executor.submit(() -> disassembleClass(classDef, fileNameHandler, options)));
+        }
+        boolean success = true;
+        try {
+            for (Future<Boolean> task : tasks) if (!task.get()) success = false;
+        } catch (Throwable error) {
+            success = false;
+        } finally {
+            executor.shutdown();
+        }
+        return success;
+    }
+
     public static boolean disassembleDexResource(DexFile dexFile, File outputDir, int jobs, BaksmaliOptions options) {
         return disassembleDexResource(dexFile, outputDir, jobs, options, null);
     }
