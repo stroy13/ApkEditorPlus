@@ -1385,7 +1385,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             return;
         }
         if (id == R.id.down_arrow_container || id == R.id.decode_result_title) {
-            setDecodeResultExpanded(!this.decodeResultExpanded);
+            showDecodeResultDetails();
             return;
         }
         if (id == R.id.menu_rotate) {
@@ -4577,13 +4577,22 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         Toast.makeText((Context) this, (CharSequence) "Manifest editing is disabled (seems not a genuine version)", 1).show();
     }
 
-    private void setDecodeResultExpanded(boolean expanded) {
-        this.decodeResultExpanded = expanded;
-        if (this.decodeResultDetail != null) {
-            this.decodeResultDetail.setVisibility(expanded ? View.VISIBLE : View.GONE);
-        }
-        View arrow = findViewById(R.id.decode_result_arrow);
-        if (arrow != null) arrow.setRotation(expanded ? 180f : 0f);
+    private void showDecodeResultDetails() {
+        if (this.decodeResultDetail == null) return;
+        String detail = this.decodeResultDetail.getText().toString();
+        if (detail.length() == 0) return;
+        TextView message = new TextView(this);
+        message.setText(detail);
+        message.setTextIsSelectable(true);
+        int padding = (int) (16 * getResources().getDisplayMetrics().density);
+        message.setPadding(padding, padding, padding, padding);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.addView(message);
+        new AlertDialog.Builder(this)
+                .setTitle(this.decodeResultTitle.getText())
+                .setView(scroll)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
     }
 
     public void dexDecodingStarted() {
@@ -4641,7 +4650,8 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         this.decodeProgressBar.setVisibility(4);
         this.decodeProgressText.setVisibility(8);
         this.decodeProgressRow.setVisibility(8);
-        setDecodeResultExpanded(false);
+        this.decodeResultExpanded = false;
+        this.decodeResultDetail.setVisibility(View.GONE);
         if (showResult) {
             this.decodeResultLayout.setVisibility(0);
         } else {
