@@ -62,6 +62,10 @@ public final class ProtectedDexExtractor {
         for (String entry : entries) {
             String outputName = entry.substring("assets/".length());
             File output = new File(outputDir, outputName);
+            // Some protected APKs contain both a root classes.dex file and a
+            // directory named classes.dex with decoy resource entries. A host
+            // filesystem cannot represent both; the executable DEX must win here.
+            if (output.isDirectory()) deleteRecursively(output);
             File parent = output.getParentFile();
             if (parent != null && !parent.exists() && !parent.mkdirs()) {
                 throw new IOException("Cannot create DEX directory: " + parent);
@@ -88,6 +92,16 @@ public final class ProtectedDexExtractor {
             result.add(output);
         }
         return result;
+    }
+
+    private static void deleteRecursively(File file) throws IOException {
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) deleteRecursively(child);
+        }
+        if (!file.delete() && file.exists()) {
+            throw new IOException("Cannot remove DEX name collision: " + file);
+        }
     }
 
     private static boolean startsWithDexMagic(byte[] bytes) {
