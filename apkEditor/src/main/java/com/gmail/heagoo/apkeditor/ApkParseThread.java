@@ -424,11 +424,23 @@ public class ApkParseThread extends Thread {
         // Protected tables frequently carry qualifier bytes newer than this
         // decoder knows. Keep those entries so a single invalid configuration does
         // not remove every string resource from the project.
-        ResPackage[] pkgs = getResPackagesFromApk(apkFile, resTable,
-                sKeepBroken || this.mApkProtected);
+        boolean keepBroken = sKeepBroken || this.mApkProtected;
+        ResPackage[] pkgs = getResPackagesFromApk(apkFile, resTable, keepBroken);
         if (pkgs == null) {
             Log.w("ApkParse", "Resource table returned no packages");
             return null;
+        }
+        // A normal APK can still contain a newer/invalid qualifier. If the first
+        // pass produced no string resources, retry once with broken configs kept;
+        // otherwise the String tab sees an apparently valid package with zero
+        // values even though the table contains them.
+        if (!keepBroken && countStringResources(pkgs) == 0) {
+            Log.w("ApkParse", "No string resources after strict table decode; retrying with keepBroken");
+            pkgs = getResPackagesFromApk(apkFile, resTable, true);
+            if (pkgs == null) {
+                Log.w("ApkParse", "keepBroken resource table retry returned no packages");
+                return null;
+            }
         }
         Log.i("ApkParse", describePackages(pkgs));
         // Do not trust package-array order. Protected/resource-virtualized APKs
