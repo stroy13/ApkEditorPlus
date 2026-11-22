@@ -1,5 +1,12 @@
 # Изменения
 
+## 1.10.0.273 — Firefox APK проходит проверку Android package parser
+
+- Полная сборка передаёт системному `PackageManager` обычный APK-путь и проверяет package, versionCode/versionName, application и массивы компонентов без необязательной загрузки meta-data.
+- Если финальный framework parser отклоняет результат, удаляются и APK, и его `.idsig`, а причина и ожидаемые/фактические значения остаются в `build-log.txt`.
+- Исправлено чтение `minSdkVersion`, `targetSdkVersion` и `maxSdkVersion` из framework resource map; подпись больше не использует ошибочный fallback для современных APK вроде Firefox 160.
+- Повышен versionCode до 273.
+
 ## 1.10.0.272 — пропуск защитных chunks в манифесте
 
 - Бинарный XML-парсер пропускает неизвестные extension-chunks и хвостовые поля в нестандартных XML-chunks, не прерывая декодирование манифеста.

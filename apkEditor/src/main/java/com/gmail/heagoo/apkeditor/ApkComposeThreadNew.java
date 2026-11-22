@@ -443,7 +443,10 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
     }
 
     private boolean signApk() {
-        String signedPath = this.targetApkPath + ".signed";
+        // Keep the temporary result APK-like while SignHelper performs its final
+        // framework validation. The final published path remains the normal .apk
+        // name, and a failed validation can never replace it with this staging file.
+        String signedPath = this.targetApkPath + ".signed.apk";
         try {
             Map<String, String> emptyMap = new HashMap<>();
             Set<String> emptySet = new HashSet<>();

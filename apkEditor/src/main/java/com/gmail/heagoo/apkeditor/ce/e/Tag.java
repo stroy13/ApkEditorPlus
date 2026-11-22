@@ -312,7 +312,7 @@ public class Tag {
             // Parse to string value
             name = containingTag.stringChunk.getStringByIndex(attrNameIdx);
             if (name == null || name.equals("")) {
-                if (attrNameIdx < containingTag.attrIdChunk.getCount()) {
+                if (attrNameIdx >= 0 && attrNameIdx < containingTag.attrIdChunk.getCount()) {
                     name = getNameFromAttr(containingTag.attrIdChunk.getAttrId(attrNameIdx));
                 }
             }
