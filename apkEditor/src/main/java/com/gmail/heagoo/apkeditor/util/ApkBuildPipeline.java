@@ -532,7 +532,11 @@ public final class ApkBuildPipeline {
     private static void verify(File signed, SigningOptions options, Logger logger) throws Exception {
         Logger out = logger == null ? NO_LOG : logger;
         ApkVerifier.Result result = new ApkVerifier.Builder(signed)
-                .setMinCheckedPlatformVersion(options.minSdkVersion)
+                // Verify signing schemes across their complete platform compatibility range,
+                // not only on the APK's minSdk. Otherwise an APK with minSdk 32+
+                // is verified via v3 alone and apksig reports v1/v2 as unused
+                // (false), even when those requested signatures are present and valid.
+                .setMinCheckedPlatformVersion(1)
                 .setMaxCheckedPlatformVersion(Math.max(37, options.targetSdkVersion))
                 .build().verify();
         log(out, "apksig verify: verified=" + result.isVerified()
