@@ -20,6 +20,15 @@ public class Aapt2ManifestCompatibilityTest {
         assertFalse(Aapt2Pipeline.safeRetryWarnings("x: warning: unexpected element <bad> found in <manifest>."));
         assertTrue(Aapt2Pipeline.safeRetryWarnings("x: warning: unexpected element <queries> found in <manifest>."));
     }
+    @Test public void convertsSplitRequiredBaseManifestToStandaloneButKeepsRealSplitMetadata() {
+        String base = "<manifest android:isSplitRequired=\"true\" android:requiredSplitTypes=\"base__abi,base__density\"/>";
+        String standalone = Aapt2Pipeline.removeBaseSplitRequirementAttributes(base);
+        assertFalse(standalone.contains("isSplitRequired"));
+        assertFalse(standalone.contains("requiredSplitTypes"));
+        String actualSplit = "<manifest android:isSplitRequired=\"true\" android:splitTypes=\"base__abi\"/>";
+        assertEquals(actualSplit, Aapt2Pipeline.removeBaseSplitRequirementAttributes(actualSplit));
+    }
+
     @Test public void removesAllEmptyAndroidAttributesAndPreservesNonEmptyValues() {
         String source = "<manifest package=\"x\" android:versionCode=\"  \" android:required=\"\" "
                 + "android:label=\"app\" custom:value=\"\"/>";

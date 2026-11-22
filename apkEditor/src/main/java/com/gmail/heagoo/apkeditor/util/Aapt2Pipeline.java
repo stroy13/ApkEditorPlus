@@ -69,6 +69,7 @@ public final class Aapt2Pipeline {
             String manifestBeforeRepair = new String(Files.readAllBytes(new File(linkManifest).toPath()),
                     java.nio.charset.StandardCharsets.UTF_8);
             String manifestAfterRepair = repairSyntheticFrameworkAttributeNames(manifestBeforeRepair);
+            manifestAfterRepair = removeBaseSplitRequirementAttributes(manifestAfterRepair);
             manifestAfterRepair = removeEmptyAndroidAttributes(manifestAfterRepair);
             manifestAfterRepair = removeInvalidUsesFeatureElements(manifestAfterRepair);
             if (!manifestBeforeRepair.equals(manifestAfterRepair)) {
@@ -157,6 +158,21 @@ public final class Aapt2Pipeline {
             "android:attr_0x([0-9a-fA-F]{8})");
     private static final Pattern EMPTY_ANDROID_ATTRIBUTE = Pattern.compile(
             "\\s+android:[A-Za-z_][A-Za-z0-9_.-]*\\s*=\\s*(['\\\"])(?:\\s*)\\1");
+
+    private static final Pattern SPLIT_REQUIRED_TRUE = Pattern.compile(
+            "\\bandroid:isSplitRequired\\s*=\\s*(['\\\"])true\\1");
+    private static final Pattern SPLIT_TYPES_ATTRIBUTE = Pattern.compile(
+            "\\s+android:splitTypes\\s*=\\s*(['\\\"])[^'\\\"]*\\1");
+    private static final Pattern REQUIRED_SPLIT_TYPES_ATTRIBUTE = Pattern.compile(
+            "\\s+android:requiredSplitTypes\\s*=\\s*(['\\\"])[^'\\\"]*\\1");
+
+    static String removeBaseSplitRequirementAttributes(String manifestXml) {
+        if (!SPLIT_REQUIRED_TRUE.matcher(manifestXml).find()
+                || SPLIT_TYPES_ATTRIBUTE.matcher(manifestXml).find()) return manifestXml;
+        String result = SPLIT_REQUIRED_TRUE.matcher(manifestXml).replaceAll("");
+        result = REQUIRED_SPLIT_TYPES_ATTRIBUTE.matcher(result).replaceAll("");
+        return result;
+    }
 
     static String removeEmptyAndroidAttributes(String manifestXml) {
         return EMPTY_ANDROID_ATTRIBUTE.matcher(manifestXml).replaceAll("");
