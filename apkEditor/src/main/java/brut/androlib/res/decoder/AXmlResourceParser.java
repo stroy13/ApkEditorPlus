@@ -407,11 +407,11 @@ public class AXmlResourceParser implements XmlResourceParser {
     public String getAttributeName(int index) {
         int offset = getAttributeOffset(index);
         int name = m_attributes[offset + ATTRIBUTE_IX_NAME];
-        if (name == -1) {
-            return "";
-        }
 
-        String value = m_strings.getString(name);
+        // Protected AXML can omit the string-pool name while retaining the
+        // resource-map entry. Do not return before the resource-ID fallback below
+        // gets a chance to recover the framework attribute name.
+        String value = name == -1 ? null : m_strings.getString(name);
 
         // A valid string-pool name is the primary source of truth for ordinary
         // APKs. Protected APKs may intentionally replace that name, so retain the
@@ -495,7 +495,24 @@ public class AXmlResourceParser implements XmlResourceParser {
                         valueData,
                         rawValue,
                         getAttributeNameResource(index));
-                return ret;
+                // A missing current package used to turn typed values whose raw
+                // string index is -1 into an empty string. That is especially
+                // damaging for android:versionCode and other integer manifest
+                // attributes: aapt2 rejects the decoded XML before it can link.
+                // Preserve a genuinely empty string value, but recover typed data
+                // when the decoder could not produce text.
+                if (ret != null && (!ret.isEmpty() || valueRaw != -1
+                        || valueType == TypedValue.TYPE_NULL)) {
+                    return ret;
+                }
+                if (valueType == TypedValue.TYPE_STRING && valueData >= 0) {
+                    String stringValue = m_strings.getString(valueData);
+                    if (stringValue != null) {
+                        return ResXmlEncoders.escapeXmlChars(stringValue);
+                    }
+                }
+                String fallback = TypedValue.coerceToString(valueType, valueData);
+                return fallback != null ? fallback : (ret != null ? ret : "");
             } catch (AndrolibException ex) {
                 setFirstError(ex);
                 LOGGER.log(Level.WARNING, String.format("Could not decode attr value, using raw value "

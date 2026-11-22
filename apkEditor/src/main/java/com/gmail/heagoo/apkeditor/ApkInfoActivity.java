@@ -127,6 +127,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserFactory;
 import org.xmlpull.v1.XmlSerializer;
 
 /* loaded from: /tmp/apkx/classes5.dex */
@@ -2896,6 +2898,14 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             }
             try {
                 this.bStringPrepared = prepareStringList();
+                if (!this.bStringPrepared) {
+                    // The resource table is the primary source, but a protected
+                    // package can still expose its decoded values under a package
+                    // name that cannot be selected before file decoding completes.
+                    // Use the generated values XML as a last-resort index so the
+                    // String tab does not remain empty after a successful decode.
+                    this.bStringPrepared = prepareStringListFromDecodedFiles();
+                }
             } catch (Throwable t) {
                 // A single broken string entry must not kill the whole decode.
                 t.printStackTrace();
@@ -3036,72 +3046,177 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
     }
 
     private boolean prepareStringList() {
-        String value;
-        List<ResResSpec> specList;
-        this.allStringValues = new HashMap<>();
+        HashMap<String, ArrayList<StringItem>> valuesByConfig = new HashMap<>();
+        this.allStringValues = valuesByConfig;
+        if (this.parseThread == null) {
+            return false;
+        }
         ResPackage pkg = this.parseThread.getApkPackage();
         if (pkg == null) {
             return false;
         }
-        List<ResResSpec> specList2 = pkg.listResSpecs();
-        for (ResResSpec spec : specList2) {
-            if ("string".equals(spec.getType().getName())) {
-                String name = spec.getName();
-                Map<ResConfigFlags, ResResource> resources = spec.getAllResources();
-                for (Map.Entry<ResConfigFlags, ResResource> entry : resources.entrySet()) {
-                    String styledValue = null;
-                    ResConfigFlags configFlag = entry.getKey();
-                    ResResource resResource = entry.getValue();
-                    // A "string" resource is not always a scalar value (file values,
-                    // bags, ...). The unconditional cast used to throw
-                    // ClassCastException and killed the whole decode thread.
-                    Object rawValue = resResource.getValue();
-                    if (!(rawValue instanceof ResScalarValue)) {
-                        value = String.valueOf(rawValue);
+
+        // Read the resource table, rather than the generated XML files. This keeps
+        // the editor usable for protected APKs whose values decoder has to skip a
+        // malformed entry, and it also preserves styled string metadata.
+        for (ResResSpec spec : pkg.listResSpecs()) {
+            if (spec == null || spec.getType() == null
+                    || !"string".equalsIgnoreCase(spec.getType().getName())) {
+                continue;
+            }
+            String name = spec.getName();
+            if (name == null || name.length() == 0) {
+                name = String.format("string_0x%08x", spec.getId().id);
+            }
+            Map<ResConfigFlags, ResResource> resources = spec.getAllResources();
+            if (resources == null) {
+                continue;
+            }
+            for (Map.Entry<ResConfigFlags, ResResource> entry : resources.entrySet()) {
+                ResConfigFlags configFlag = entry.getKey();
+                ResResource resResource = entry.getValue();
+                if (configFlag == null || resResource == null) {
+                    continue;
+                }
+
+                String styledValue = null;
+                String value;
+                Object rawValue = resResource.getValue();
+                if (rawValue instanceof ResScalarValue) {
+                    ResScalarValue scalar = (ResScalarValue) rawValue;
+                    if (scalar instanceof ResReferenceValue) {
+                        value = scalar.toString();
+                    } else if (scalar.isStyled()) {
+                        styledValue = scalar.getHtmlValue();
+                        String raw = scalar.getRawValue();
+                        value = raw != null ? raw : scalar.toString();
                     } else {
-                        ResScalarValue value2 = (ResScalarValue) rawValue;
-                        if (value2 instanceof ResReferenceValue) {
-                            value = value2.toString();
-                        } else if (value2.isStyled()) {
-                            styledValue = value2.getHtmlValue();
-                            String styled = value2.getRawValue();
-                            value = styled != null ? styled : value2.toString();
-                        } else {
-                            String value3 = value2.getRawValue();
-                            if (value3 != null) {
-                                value = value3;
-                            } else {
-                                value = value2.toString();
+                        String raw = scalar.getRawValue();
+                        value = raw != null ? raw : scalar.toString();
+                    }
+                } else {
+                    // A malformed/protected table can expose a non-scalar value
+                    // under the string type. Keep the entry visible instead of
+                    // aborting preparation with ClassCastException.
+                    value = String.valueOf(rawValue);
+                }
+                if (value == null) {
+                    value = "";
+                }
+
+                String qualifier = configFlag.getQualifiers();
+                ArrayList<StringItem> stringValueList = valuesByConfig.get(qualifier);
+                if (stringValueList == null) {
+                    stringValueList = new ArrayList<>();
+                    valuesByConfig.put(qualifier, stringValueList);
+                }
+                stringValueList.add(new StringItem(name, value, styledValue));
+            }
+        }
+        return !valuesByConfig.isEmpty();
+    }
+
+    /**
+     * Index generated values XML when a protected resource table cannot expose
+     * the application package before file decoding. This is deliberately a
+     * fallback: the table path above remains the source that preserves styled
+     * values and references.
+     */
+    private boolean prepareStringListFromDecodedFiles() {
+        if (this.decodeRootPath == null) {
+            return false;
+        }
+        File resRoot = new File(this.decodeRootPath, "res");
+        File[] valueDirectories = resRoot.listFiles();
+        if (valueDirectories == null) {
+            return false;
+        }
+        HashMap<String, ArrayList<StringItem>> valuesByConfig = new HashMap<>();
+        XmlPullParserFactory factory;
+        try {
+            factory = XmlPullParserFactory.newInstance();
+        } catch (Exception e) {
+            return false;
+        }
+        for (File directory : valueDirectories) {
+            if (directory == null || !directory.isDirectory()
+                    || !(directory.getName().equals("values")
+                    || directory.getName().startsWith("values-"))) {
+                continue;
+            }
+            String directoryName = directory.getName();
+            String qualifier = directoryName.length() == "values".length()
+                    ? "" : directoryName.substring("values".length());
+            File[] files = directory.listFiles();
+            if (files == null) {
+                continue;
+            }
+            for (File file : files) {
+                if (file == null || !file.isFile() || !file.getName().endsWith(".xml")) {
+                    continue;
+                }
+                FileInputStream input = null;
+                try {
+                    input = new FileInputStream(file);
+                    XmlPullParser parser = factory.newPullParser();
+                    parser.setInput(input, StandardCharsets.UTF_8.name());
+                    int event;
+                    while ((event = parser.next()) != XmlPullParser.END_DOCUMENT) {
+                        if (event != XmlPullParser.START_TAG
+                                || !"string".equals(parser.getName())) {
+                            continue;
+                        }
+                        String name = parser.getAttributeValue(null, "name");
+                        int stringDepth = parser.getDepth();
+                        StringBuilder text = new StringBuilder();
+                        while ((event = parser.next()) != XmlPullParser.END_DOCUMENT) {
+                            if (event == XmlPullParser.TEXT || event == XmlPullParser.CDSECT) {
+                                if (parser.getText() != null) {
+                                    text.append(parser.getText());
+                                }
+                            } else if (event == XmlPullParser.END_TAG
+                                    && parser.getDepth() == stringDepth) {
+                                break;
                             }
                         }
+                        if (name != null && name.length() != 0) {
+                            ArrayList<StringItem> list = valuesByConfig.get(qualifier);
+                            if (list == null) {
+                                list = new ArrayList<>();
+                                valuesByConfig.put(qualifier, list);
+                            }
+                            list.add(new StringItem(name, text.toString()));
+                        }
                     }
-                    StringItem item = new StringItem(name, value, styledValue);
-                    String qualifier = configFlag.getQualifiers();
-                    ResPackage pkg2 = pkg;
-                    ArrayList<StringItem> stringValueList = this.allStringValues.get(qualifier);
-                    if (stringValueList != null) {
-                        specList = specList2;
-                    } else {
-                        stringValueList = new ArrayList<>();
-                        specList = specList2;
-                        this.allStringValues.put(qualifier, stringValueList);
+                } catch (Exception e) {
+                    LOGGER.warning("Could not index decoded string file " + file + ": " + e);
+                } finally {
+                    if (input != null) {
+                        try {
+                            input.close();
+                        } catch (IOException ignored) {
+                        }
                     }
-                    stringValueList.add(item);
-                    pkg = pkg2;
-                    specList2 = specList;
                 }
             }
-            pkg = pkg;
-            specList2 = specList2;
         }
+        if (valuesByConfig.isEmpty()) {
+            return false;
+        }
+        this.allStringValues = valuesByConfig;
         return true;
     }
 
     private void showStringList() {
+        if (this.allStringValues == null) {
+            this.allStringValues = new HashMap<>();
+        }
         if (this.stringListAdapter != null && this.changedStringValues != null) {
             this.stringListAdapter.setChangedValues(this.changedStringValues);
         }
-        PendingStringEdits.merge(this.allStringValues, this.stringListAdapter.getChangedValues());
+        if (this.stringListAdapter != null) {
+            PendingStringEdits.merge(this.allStringValues, this.stringListAdapter.getChangedValues());
+        }
         initAddLanguageBtn();
         initTranslateBtn();
         initSpinner();
@@ -3831,8 +3946,13 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
     }
 
     public void updateStringList() {
-        if (this.curConfig == null) {
-            this.curConfig = getBestConfig(this.allStringValues.keySet());
+        if (this.allStringValues == null || this.allStringValues.isEmpty()) {
+            this.curConfig = null;
+            updateStringList(new ArrayList<StringItem>());
+            return;
+        }
+        if (this.curConfig == null || !this.allStringValues.containsKey(this.curConfig)) {
+            this.curConfig = chooseStringConfig();
         }
         LOGGER.info("********BEST*********" + this.curConfig);
         ArrayList<StringItem> values = this.allStringValues.get(this.curConfig);
@@ -3840,15 +3960,44 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
     }
 
     private void updateStringList(ArrayList<StringItem> values) {
+        if (values == null) {
+            values = new ArrayList<>();
+        }
         this.stringListAdapter.updateData(this.curConfig, values);
     }
 
+    private String chooseStringConfig() {
+        if (this.allStringValues == null || this.allStringValues.isEmpty()) {
+            return null;
+        }
+        String best = getBestConfig(this.allStringValues.keySet());
+        if (best != null && this.allStringValues.containsKey(best)) {
+            return best;
+        }
+        // An APK may contain only a translated configuration. The old selection
+        // logic returned null in that case, leaving the adapter empty even though
+        // allStringValues had been populated. Pick the first non-empty config as a
+        // deterministic fallback so every decoded string remains reachable.
+        List<String> configs = new ArrayList<>();
+        for (Map.Entry<String, ArrayList<StringItem>> entry : this.allStringValues.entrySet()) {
+            if (entry.getKey() != null && entry.getValue() != null && !entry.getValue().isEmpty()) {
+                configs.add(entry.getKey());
+            }
+        }
+        if (configs.isEmpty()) {
+            return this.allStringValues.keySet().iterator().next();
+        }
+        Collections.sort(configs);
+        return configs.get(0);
+    }
+
     private void initSpinner() {
-        if (this.allStringValues == null) {
+        if (this.allStringValues == null || this.allStringValues.isEmpty()) {
+            updateStringList(new ArrayList<StringItem>());
             return;
         }
         if (this.curConfig == null || !this.allStringValues.containsKey(this.curConfig)) {
-            this.curConfig = getBestConfig(this.allStringValues.keySet());
+            this.curConfig = chooseStringConfig();
         }
         this.langConfigList = new ArrayList<>();
         String[] languages = new String[this.allStringValues.size()];
@@ -3890,6 +4039,11 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             }
         });
         spinner.setSelection(selected);
+        // Do not rely on Spinner dispatching onItemSelected when the selected
+        // position is already zero. On several Android versions that callback is
+        // deferred (or skipped), which made the String tab show an empty ListView
+        // even though allStringValues and the language list were populated.
+        updateStringList();
     }
 
     private void resetSpinner() {

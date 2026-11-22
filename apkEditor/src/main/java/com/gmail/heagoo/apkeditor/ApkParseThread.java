@@ -6,6 +6,7 @@ import android.content.res.AssetManager;
 import android.util.Log;
 import brut.androlib.AndrolibException;
 import brut.androlib.res.data.ResPackage;
+import brut.androlib.res.data.ResResSpec;
 import brut.androlib.res.data.ResTable;
 import brut.androlib.res.decoder.ARSCDecoder;
 import brut.androlib.res.util.ExtFile;
@@ -449,15 +450,34 @@ public class ApkParseThread extends Thread {
                     }
                 }
             }
-            for (ResPackage candidate : pkgs) {
-                if (this.apkPackage != null) break;
-                if (candidate == null || "android".equals(candidate.getName())
-                        || "com.htc".equals(candidate.getName())) continue;
-                if (this.apkPackage == null
-                        || candidate.getResSpecCount() > this.apkPackage.getResSpecCount()) {
-                    this.apkPackage = candidate;
+            if (this.apkPackage == null) {
+                ResPackage bestCandidate = null;
+                int bestStringResources = -1;
+                int bestSpecCount = -1;
+                for (ResPackage candidate : pkgs) {
+                    if (candidate == null || "android".equals(candidate.getName())
+                            || "com.htc".equals(candidate.getName())) continue;
+                    int stringResources = countStringResources(candidate);
+                    int specCount = candidate.getResSpecCount();
+                    // Decoy package chunks can contain many non-string specs while the
+                    // real application package contains the values shown in the String
+                    // tab. Prefer the package with actual string entries, then retain
+                    // the old largest-package fallback for stringless APKs.
+                    if (bestCandidate == null || stringResources > bestStringResources
+                            || (stringResources == bestStringResources && specCount > bestSpecCount)) {
+                        bestCandidate = candidate;
+                        bestStringResources = stringResources;
+                        bestSpecCount = specCount;
+                    }
                 }
+                this.apkPackage = bestCandidate;
             }
+        }
+        if (this.apkPackage == null && pkgs.length > 0) {
+            // All candidates were framework-like. Keep the first package so the
+            // existing decoder can report a useful result instead of failing with
+            // a null package.
+            this.apkPackage = pkgs[0];
         }
         if (this.apkPackage == null) {
             throw new AndrolibException("Arsc files with zero or multiple packages");
@@ -465,6 +485,18 @@ public class ApkParseThread extends Thread {
         resTable.addPackage(this.apkPackage, true);
         LOGGER.info("Loaded.");
         return this.apkPackage;
+    }
+
+    private int countStringResources(ResPackage pkg) {
+        int count = 0;
+        for (ResResSpec spec : pkg.listResSpecs()) {
+            if (spec != null && spec.getType() != null
+                    && "string".equalsIgnoreCase(spec.getType().getName())
+                    && spec.getAllResources() != null) {
+                count += spec.getAllResources().size();
+            }
+        }
+        return count;
     }
 
     private ResPackage[] getResPackagesFromApk(ExtFile apkFile, ResTable resTable, boolean keepBroken) throws AndrolibException {

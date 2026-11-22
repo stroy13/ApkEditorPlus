@@ -80,8 +80,12 @@ class StringListAdapter extends BaseAdapter implements AdapterView.OnItemClickLi
         synchronized (this.valueList) {
             this.curConfig = curConfig;
             this.valueList.clear();
-            for (StringItem item : list) {
-                this.valueList.add(item);
+            if (list != null) {
+                for (StringItem item : list) {
+                    if (item != null) {
+                        this.valueList.add(item);
+                    }
+                }
             }
         }
         notifyDataSetChanged();
