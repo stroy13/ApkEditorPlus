@@ -472,8 +472,16 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
                         }
                         String aapt2 = new File(this.ctx.getApplicationInfo().nativeLibraryDir, newest ? "libaapt2_37.so" : "libaapt2_exec.so").getAbsolutePath();
                         Aapt2Pipeline.build(aapt2, selectedFramework, this.decodedFilePath + "/res", this.decodedFilePath + "/AndroidManifest.xml", this.resourceApkPath, this.buildTrace == null ? null : this.buildTrace.logger());
+                        File output = new File(this.resourceApkPath);
+                        ApkBuildPipeline.validateResourceArchive(output);
+                        if (this.buildTrace != null && this.buildTrace.logger() != null) {
+                            this.buildTrace.logger().log("AAPT2 resource archive validated: "
+                                    + output.length() + " bytes");
+                        }
                         return true;
                     } catch (Exception e) {
+                        File failedOutput = new File(this.resourceApkPath);
+                        if (failedOutput.exists()) failedOutput.delete();
                         // A renamed type that only ever held values has no
                         // directory to spot, so the compiler is the one that
                         // finds it. Fall back rather than fail the build.
