@@ -733,7 +733,11 @@ public class ARSCDecoder {
         int parent = head[0];
         int count = head[1];
         if (count < 0 || count > MAX_COMPLEX_ENTRY_ITEMS) {
-            throw new AndrolibException("Invalid complex resource entry count: " + count);
+            throw new AndrolibException("Invalid complex resource entry count: " + count
+                    + " (parent=0x" + Integer.toHexString(parent)
+                    + ", streamOffset=" + mCountIn.getCount()
+                    + ", typeChunkStart=" + mHeader.startPosition
+                    + ", typeChunkSize=" + mHeader.chunkSize + ")");
         }
         long rawSize = (long) (4 + 8) * count;
         requireChunkBytes(rawSize, "complex entry values");
