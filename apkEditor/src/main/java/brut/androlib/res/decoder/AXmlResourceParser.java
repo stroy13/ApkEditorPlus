@@ -413,21 +413,13 @@ public class AXmlResourceParser implements XmlResourceParser {
 
         String value = m_strings.getString(name);
 
-        // A valid string-pool name is the primary source of truth. In particular,
-        // a protected APK can have a framework table from a different platform
-        // level, or the protected resource parser can rename duplicate framework
-        // specs. Looking up every android attribute before consulting this value
-        // used to replace a perfectly good "name" entry with a synthetic or
-        // suffixed framework name; aapt2 then reported that activity/action/etc.
-        // had no android:name. Use the resource-map/framework name only when the
-        // binary XML genuinely has no usable string-pool name.
-        if (value != null && value.length() != 0) {
-            return value;
-        }
-
+        // A valid string-pool name is the primary source of truth for ordinary
+        // APKs. Protected APKs may intentionally replace that name, so retain the
+        // resource-ID lookup for that mode; reject names synthesized by the
+        // protected resource parser and fall back to the binary XML name instead.
         int resId = getAttributeNameResource(index);
         String frameworkName = null;
-        if (mAttrDecoder != null) {
+        if (mAttrDecoder != null && (apkProtected || value == null || value.length() == 0)) {
             try {
                 frameworkName = mAttrDecoder.decodeManifestAttr(resId);
             } catch (AndrolibException e) {
@@ -435,7 +427,8 @@ public class AXmlResourceParser implements XmlResourceParser {
             }
         }
         if (frameworkName != null && frameworkName.length() != 0
-                && !isGeneratedResourceName(frameworkName)) {
+                && !isGeneratedResourceName(frameworkName)
+                && (apkProtected || value == null || value.length() == 0)) {
             return frameworkName;
         }
         if (value != null && value.length() != 0) {
