@@ -145,6 +145,7 @@ public class ResAttrDecoder {
             // true/false value would discard qualifier-dependent behavior.
             return formatReference(value, type == TypedValue.TYPE_ATTRIBUTE
                     || type == 0x08);
+        }
 
         // Some protected writers incorrectly keep a numeric @id in the raw string
         // slot while marking the value as a string. Recover it only for attributes
