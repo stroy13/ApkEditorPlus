@@ -10,6 +10,7 @@ import com.gmail.heagoo.apkeditor.ce.IDescriptionUpdate;
 import com.gmail.heagoo.apkeditor.smali.ISmaliAssembleCallback;
 import com.gmail.heagoo.apkeditor.util.Aapt2Pipeline;
 import com.gmail.heagoo.apkeditor.util.Aapt2ResourceTypes;
+import com.gmail.heagoo.apkeditor.util.Aapt2ResourceTableFallback;
 import com.gmail.heagoo.apkeditor.util.MissingResourceAttributes;
 import com.gmail.heagoo.apkeditor.util.SignHelper;
 import com.gmail.heagoo.apkeditor.util.ComposeBuildTrace;
@@ -329,6 +330,10 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
 
     private void mergeApk() throws IOException {
         char c;
+        if (Aapt2ResourceTableFallback.restoreOriginalIfEmpty(this.resourceApkPath, this.targetApkPath)
+                && this.buildTrace != null && this.buildTrace.logger() != null) {
+            this.buildTrace.logger().log("AAPT2 emitted an empty resource table; preserved the original resources.arsc");
+        }
         Map<String, String> extraReplaces = new HashMap<>();
         if (this.extraMaker != null) {
             try {
