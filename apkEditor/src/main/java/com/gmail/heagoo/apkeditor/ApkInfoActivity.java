@@ -2914,6 +2914,8 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                     // Use the generated values XML as a last-resort index so the
                     // String tab does not remain empty after a successful decode.
                     this.bStringPrepared = prepareStringListFromDecodedFiles();
+                    Log.i("StringTab", "resourceDecoded fileFallback=" + this.bStringPrepared
+                            + "; " + describeStringIndex());
                 }
             } catch (Throwable t) {
                 // A single broken string entry must not kill the whole decode.

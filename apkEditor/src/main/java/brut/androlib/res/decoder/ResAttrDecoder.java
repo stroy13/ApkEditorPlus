@@ -215,6 +215,15 @@ public class ResAttrDecoder {
             if ("true".equalsIgnoreCase(text) || "false".equalsIgnoreCase(text)) {
                 return text.toLowerCase();
             }
+            if (text.startsWith("@") || text.startsWith("?")) {
+                Integer referencedId = parseReferenceId(text);
+                if (referencedId != null) {
+                    String referencedBoolean = decodeReferencedBoolean(referencedId);
+                    if (referencedBoolean != null) {
+                        return referencedBoolean;
+                    }
+                }
+            }
         }
         if (type == TypedValue.TYPE_INT_BOOLEAN
                 || (type >= TypedValue.TYPE_FIRST_INT && type <= TypedValue.TYPE_LAST_INT)) {
