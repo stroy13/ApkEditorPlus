@@ -358,13 +358,20 @@ public class AXmlResourceParser implements XmlResourceParser {
                     value = appNamespace;
                 }
             }
-            // Original logical from apktool
-            else if (m_strings.getString(name).length() == 0) {
-                value = android_ns;
+            // Original logical from apktool. Obfuscated manifests can contain
+            // invalid string-pool indices, so do not dereference a missing name.
+            else {
+                String attributeName = m_strings.getString(name);
+                if (attributeName != null && attributeName.length() == 0) {
+                    value = android_ns;
+                }
             }
         }
 
-        return value;
+        // Protected manifests may reference a namespace string that is absent from
+        // the string pool. XmlSerializer expects a non-null namespace; treat an
+        // unresolved namespace as unqualified rather than aborting manifest decode.
+        return value != null ? value : "";
     }
 
     private String getPossibleNamespace() {
@@ -419,7 +426,7 @@ public class AXmlResourceParser implements XmlResourceParser {
 
         // some attributes will return "", we must rely on the resource_id and refer to the frameworks
         // to match the resource id to the name. ex: 0x101021C = versionName
-        if (value.length() != 0 && !android_ns.equals(getAttributeNamespace(index))) {
+        if (value != null && value.length() != 0 && !android_ns.equals(getAttributeNamespace(index))) {
             return value;
         } else {
             int resId = getAttributeNameResource(index);
@@ -785,52 +792,115 @@ public class AXmlResourceParser implements XmlResourceParser {
                 continue;
             }
 
-            if (chunkType < CHUNK_XML_FIRST || chunkType > CHUNK_XML_LAST) {
-                throw new IOException("Invalid chunk type (" + chunkType + ").");
+            // Some protectors insert non-XML extension chunks into AndroidManifest.xml.
+            // The chunk header packs headerSize in the high 16 bits and type in the low
+            // 16 bits. Skip unknown chunks by their declared size rather than rejecting
+            // the whole manifest (e.g. type 0x0200 in APK Editor King V5.0).
+            int rawChunkType = chunkType & 0xffff;
+            int chunkHeaderSize = (chunkType >>> 16) & 0xffff;
+            if (rawChunkType < 0x0100 || rawChunkType > 0x0104) {
+                int chunkSize = m_reader.readInt();
+                if (chunkHeaderSize < 8 || chunkSize < chunkHeaderSize) {
+                    throw new IOException("Invalid unsupported chunk header/size: type="
+                            + rawChunkType + ", header=" + chunkHeaderSize + ", size=" + chunkSize);
+                }
+                int skipped = m_reader.skipBytes(chunkSize - 8);
+                if (skipped != chunkSize - 8) {
+                    throw new IOException("Truncated unsupported XML chunk: type=" + rawChunkType);
+                }
+                continue;
             }
 
             // Fake START_DOCUMENT event.
-            if (chunkType == CHUNK_XML_START_TAG && event == -1) {
+            if (rawChunkType == 0x0102 && event == -1) {
                 m_event = START_DOCUMENT;
                 break;
             }
 
             // Common header.
-            /* chunkSize */
-            m_reader.skipInt();
+            int chunkSize = m_reader.readInt();
+            if (chunkHeaderSize < 16 || chunkSize < chunkHeaderSize) {
+                throw new IOException("Invalid XML chunk header/size (header="
+                        + chunkHeaderSize + ", size=" + chunkSize + ").");
+            }
             int lineNumber = m_reader.readInt();
             /* 0xFFFFFFFF */
             m_reader.skipInt();
+            if (chunkHeaderSize > 16) {
+                int extraHeader = chunkHeaderSize - 16;
+                if (m_reader.skipBytes(extraHeader) != extraHeader) {
+                    throw new IOException("Truncated XML chunk header");
+                }
+            }
 
-            if (chunkType == CHUNK_XML_START_NAMESPACE || chunkType == CHUNK_XML_END_NAMESPACE) {
-                if (chunkType == CHUNK_XML_START_NAMESPACE) {
+            if (rawChunkType == 0x0100 || rawChunkType == 0x0101) {
+                if (rawChunkType == 0x0100) {
                     int prefix = m_reader.readInt();
                     int uri = m_reader.readInt();
                     m_namespaces.push(prefix, uri);
+                    skipChunkRemainder(chunkSize, chunkHeaderSize + 8);
                 } else {
                     /* prefix */
                     m_reader.skipInt();
                     /* uri */
                     m_reader.skipInt();
                     m_namespaces.pop();
+                    skipChunkRemainder(chunkSize, chunkHeaderSize + 8);
                 }
                 continue;
             }
 
             m_lineNumber = lineNumber;
 
-            if (chunkType == CHUNK_XML_START_TAG) {
+            if (rawChunkType == 0x0102) {
                 m_namespaceUri = m_reader.readInt();
                 m_name = m_reader.readInt();
-                /* flags? */
-                m_reader.skipInt();
-                int attributeCount = m_reader.readInt();
-                m_idAttribute = (attributeCount >>> 16) - 1;
-                attributeCount &= 0xFFFF;
+                int attributeInfo = m_reader.readInt();
+                int attributeStart = attributeInfo & 0xFFFF;
+                int attributeSize = (attributeInfo >>> 16) & 0xFFFF;
+                int attributeCountAndId = m_reader.readInt();
+                m_idAttribute = (attributeCountAndId >>> 16) - 1;
+                int attributeCount = attributeCountAndId & 0xFFFF;
                 m_classAttribute = m_reader.readInt();
                 m_styleAttribute = (m_classAttribute >>> 16) - 1;
                 m_classAttribute = (m_classAttribute & 0xFFFF) - 1;
-                m_attributes = m_reader.readIntArray(attributeCount * ATTRIBUTE_LENGTH);
+                if (attributeSize < ATTRIBUTE_LENGTH * 4
+                        || (long) chunkHeaderSize + 20
+                        + (long) attributeCount * attributeSize > chunkSize) {
+                    throw new IOException("Invalid attribute layout (start=" + attributeStart
+                            + ", size=" + attributeSize + ").");
+                }
+                // Some protectors overwrite attributeStart with a decoy value (99
+                // in APK Editor King V5.0) while retaining the real 26-byte stride.
+                // Honor the offset only when the declared records still fit in this
+                // chunk; otherwise fall back to the standard start immediately after
+                // the attribute extension.
+                int effectiveAttributeStart = attributeStart;
+                if (effectiveAttributeStart < 20
+                        || (long) chunkHeaderSize + effectiveAttributeStart
+                        + (long) attributeCount * attributeSize > chunkSize) {
+                    // Some protectors store attributes at an extended offset. Only
+                    // fall back when the declared records cannot fit in this chunk.
+                    effectiveAttributeStart = 20;
+                }
+                int attributePadding = effectiveAttributeStart - 20;
+                if (attributePadding > 0 && m_reader.skipBytes(attributePadding) != attributePadding) {
+                    throw new IOException("Truncated attribute extension");
+                }
+                m_attributes = new int[attributeCount * ATTRIBUTE_LENGTH];
+                int extraAttributeBytes = attributeSize - ATTRIBUTE_LENGTH * 4;
+                for (int i = 0; i < attributeCount; i++) {
+                    int base = i * ATTRIBUTE_LENGTH;
+                    for (int j = 0; j < ATTRIBUTE_LENGTH; j++) {
+                        m_attributes[base + j] = m_reader.readInt();
+                    }
+                    if (extraAttributeBytes > 0
+                            && m_reader.skipBytes(extraAttributeBytes) != extraAttributeBytes) {
+                        throw new IOException("Truncated extended attribute");
+                    }
+                }
+                skipChunkRemainder(chunkSize, chunkHeaderSize + effectiveAttributeStart
+                        + attributeCount * attributeSize);
                 for (int i = ATTRIBUTE_IX_VALUE_TYPE; i < m_attributes.length; ) {
                     m_attributes[i] = (m_attributes[i] >>> 24);
                     i += ATTRIBUTE_LENGTH;
@@ -840,23 +910,35 @@ public class AXmlResourceParser implements XmlResourceParser {
                 break;
             }
 
-            if (chunkType == CHUNK_XML_END_TAG) {
+            if (rawChunkType == 0x0103) {
                 m_namespaceUri = m_reader.readInt();
                 m_name = m_reader.readInt();
+                skipChunkRemainder(chunkSize, chunkHeaderSize + 8);
                 m_event = END_TAG;
                 m_decreaseDepth = true;
                 break;
             }
 
-            if (chunkType == CHUNK_XML_TEXT) {
+            if (rawChunkType == 0x0104) {
                 m_name = m_reader.readInt();
                 /* ? */
                 m_reader.skipInt();
                 /* ? */
                 m_reader.skipInt();
+                skipChunkRemainder(chunkSize, chunkHeaderSize + 12);
                 m_event = TEXT;
                 break;
             }
+        }
+    }
+
+    private void skipChunkRemainder(int chunkSize, int consumed) throws IOException {
+        int remaining = chunkSize - consumed;
+        if (remaining < 0) {
+            throw new IOException("XML chunk smaller than its decoded header");
+        }
+        if (remaining > 0 && m_reader.skipBytes(remaining) != remaining) {
+            throw new IOException("Truncated XML chunk extension");
         }
     }
 

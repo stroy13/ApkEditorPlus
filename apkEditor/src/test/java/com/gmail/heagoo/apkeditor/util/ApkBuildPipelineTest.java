@@ -173,6 +173,25 @@ public class ApkBuildPipelineTest {
     }
 
     @Test
+    public void verifiesRequestedSchemesForModernMinSdkApk() throws Exception {
+        File source = sourceApk();
+        File target = new File(folder.getRoot(), "modern-min-sdk.apk");
+        ApkBuildPipeline.SigningOptions base = options();
+        ApkBuildPipeline.SigningOptions modern = new ApkBuildPipeline.SigningOptions(
+                base.privateKey, base.certificate, 32, 36, true, true, true, false,
+                base.compressionLevel, base.extractNativeLibs);
+
+        ApkBuildPipeline.build(source, target, null, null, null, modern, null, null);
+
+        ApkVerifier.Result result = new ApkVerifier.Builder(target)
+                .setMinCheckedPlatformVersion(32)
+                .setMaxCheckedPlatformVersion(37)
+                .build().verify();
+        assertTrue(result.isVerified());
+        assertTrue("v3 signature must verify for API 32+", result.isVerifiedUsingV3Scheme());
+    }
+
+    @Test
     public void missingReplacementFailsWithoutPublishing() throws Exception {
         File source = sourceApk();
         File target = new File(folder.getRoot(), "gen_signed.apk");

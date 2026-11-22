@@ -10,6 +10,8 @@ import brut.util.FastXmlSerializer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.HashSet;
+import java.util.Set;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -83,13 +85,13 @@ public class XmlDecoder implements ResStreamDecoder {
                         event(this.par, eventType);
                     }
                 } catch (Exception e) {
-                    throw new AndrolibException(e.getMessage());
+                    throw new AndrolibException(e.getMessage(), e);
                 }
             }
             this.ser.flush();
             return null;
         } catch (Exception e2) {
-            throw new AndrolibException(e2.getMessage());
+            throw new AndrolibException(e2.getMessage(), e2);
         }
     }
 
@@ -158,12 +160,22 @@ public class XmlDecoder implements ResStreamDecoder {
             case 1:
                 this.ser.endDocument();
                 break;
-            case 2:
+            case 2: {
                 this.ser.writeStartTag(pp);
+                Set<String> emittedAttributes = new HashSet<>();
                 for (int i = 0; i < pp.getAttributeCount(); i++) {
-                    this.ser.attribute(pp.getAttributeNamespace(i), pp.getAttributeName(i), pp.getAttributeValue(i));
+                    String namespace = pp.getAttributeNamespace(i);
+                    String name = pp.getAttributeName(i);
+                    if (name == null || name.length() == 0) continue;
+                    String key = (namespace == null ? "" : namespace) + '\u0000' + name;
+                    // Protected manifests can repeat a damaged attribute record;
+                    // duplicate qualified names make aapt2 reject the whole project.
+                    if (emittedAttributes.add(key)) {
+                        this.ser.attribute(namespace, name, pp.getAttributeValue(i));
+                    }
                 }
                 break;
+            }
             case 3:
                 this.ser.endTag(pp.getNamespace(), pp.getName());
                 break;

@@ -544,7 +544,11 @@ public final class ApkBuildPipeline {
         if (!result.isVerified() || !result.getErrors().isEmpty()) {
             throw new IOException("Signed APK verification failed: " + result.getErrors());
         }
-        if (options.v2 && !result.isVerifiedUsingV2Scheme()) {
+        // v2 is only needed on platform versions below Android 9 (API 28).
+        // When minSdk is 28+, apksig verifies the applicable v3 scheme and
+        // reports v2=false because that older scheme is outside the APK's
+        // installable platform range; that is not a signing failure.
+        if (options.v2 && options.minSdkVersion < 28 && !result.isVerifiedUsingV2Scheme()) {
             throw new IOException("Requested v2 signature is missing or invalid");
         }
         if (options.v3 && !result.isVerifiedUsingV3Scheme() && options.minSdkVersion >= 28) {

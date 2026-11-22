@@ -20,6 +20,8 @@ import brut.directory.FileDirectory;
 import brut.util.KXmlSerializer;
 import com.gmail.heagoo.apkeditor.XmlDecoder;
 import com.gmail.heagoo.apkeditor.util.TimeDumper;
+import com.gmail.heagoo.apkeditor.util.ApkResourceLayout;
+import com.gmail.heagoo.apkeditor.util.ProtectedDexExtractor;
 import com.gmail.heagoo.apklib.AXMLParser;
 import com.gmail.heagoo.common.FileUtil;
 import com.gmail.heagoo.neweditor.Encoding;
@@ -125,7 +127,7 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
 
     public void decode(ExtFile apkFile, File outDir) throws Exception {
         Directory inApk = apkFile.getDirectory();
-        if (!inApk.containsDir("res")) {
+        if (!ApkResourceLayout.hasStandardResourceFiles(inApk)) {
             this.protectedApk = true;
             this.xmlDecoder.setApkProtected(true);
         }
@@ -160,6 +162,12 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
             generatePublicXml(resDir);
         }
         timer.lastTime("Value Decode Time");
+        if (!this.stopRunning) {
+            // DEX files are required for editing even when protected APKs use
+            // the lightweight resource-decoding path (where other raw files are
+            // intentionally omitted).
+            decodeDexFiles(apkFile, outDir);
+        }
         if (this.isFullDecoding) {
             progress(4);
             if (!this.stopRunning) {
@@ -216,15 +224,52 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
             if (in.containsDir("kotlin")) {
                 in.copyToDir(outDir, "kotlin");
             }
-            Set<String> files = in.getFiles(false);
-            for (String file : files) {
-                if (file.endsWith(".dex")) {
+        } catch (DirectoryException ex) {
+            throw new AndrolibException(ex);
+        }
+    }
+
+    private void decodeDexFiles(ExtFile apkFile, File outDir) throws AndrolibException {
+        try {
+            Directory in = apkFile.getDirectory();
+            if (ProtectedDexExtractor.isSupported(in)) {
+                // Replace the tiny bootstrap classes.dex with the actual DEX payloads
+                // that the protector loads from assets at runtime, and expose their
+                // classes as editable smali source in the project.
+                List<File> payloads = ProtectedDexExtractor.extract(in, outDir);
+                for (File dex : payloads) {
+                    File smaliDir = new File(outDir, smaliDirectoryName(dex.getName()));
+                    try {
+                        Class<?> decoder = Class.forName(
+                                "com.gmail.heagoo.apkeditor.plus.ResourceDecoder");
+                        decoder.getMethod("decodeDex", String.class, String.class)
+                                .invoke(null, dex.getAbsolutePath(), smaliDir.getAbsolutePath());
+                    } catch (Exception decodeError) {
+                        LOGGER.warning("Could not disassemble protected DEX " + dex.getName()
+                                + ": " + decodeError);
+                    }
+                }
+                return;
+            }
+            for (String file : in.getFiles(false)) {
+                if (file.matches("classes([2-9]|[1-9][0-9]+)?\\.dex")) {
                     in.copyToDir(outDir, file);
                 }
             }
         } catch (DirectoryException ex) {
-            throw new AndrolibException(ex);
+            throw new AndrolibException("Could not copy DEX files", ex);
+        } catch (IOException ex) {
+            throw new AndrolibException("Could not decode protected DEX files", ex);
         }
+    }
+
+    private static String smaliDirectoryName(String dexName) {
+        if ("classes.dex".equals(dexName)) return "smali";
+        if (dexName.matches("classes(?:[2-9]|[1-9][0-9]+)\\.dex")) {
+            return "smali_classes" + dexName.substring("classes".length(),
+                    dexName.length() - ".dex".length());
+        }
+        return "smali";
     }
 
     private void generatePublicXml(File outDir) throws AndrolibException {
@@ -259,6 +304,14 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
         ResFileValue fileValue = (ResFileValue) res.getValue();
         String inFileName = fileValue.getStrippedPath();
         String outResName = res.getFilePath();
+        // Protected APKs can point resource-table entries at absolute ZIP names
+        // (e.g. /AndroidManifest.xml/  .xml). Android's ZipEntry rejects these;
+        // ignore the bogus resource instead of aborting the entire APK decode.
+        if (!ordinaryPath(inFileName) || !ordinaryPath(outResName)) {
+            LOGGER.warning("Skipping invalid protected APK resource path: " + inFileName);
+            res.replace(new ResBoolValue(false, 0, null));
+            return;
+        }
         String typeName = res.getResSpec().getType().getName();
 
         String ext = null;
@@ -270,6 +323,21 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
         } else {
             ext = filename.substring(extPos);
             outFileName = outResName + ext;
+        }
+
+        // Malformed protected resource tables can map a resource below a path that
+        // is already a regular file (for example AndroidManifest.xml/.xml). Such
+        // entries cannot be represented in the decoded tree and ZipFile reports
+        // "Invalid zip entry path" when the resource is copied. Ignore the bad
+        // resource rather than aborting the whole APK decode.
+        int parentEnd = outFileName.indexOf('/');
+        while (parentEnd >= 0) {
+            if (outDir.containsFile(outFileName.substring(0, parentEnd))) {
+                LOGGER.warning("Skipping protected resource below file path: " + outFileName);
+                res.replace(new ResBoolValue(false, 0, null));
+                return;
+            }
+            parentEnd = outFileName.indexOf('/', parentEnd + 1);
         }
 
         LOGGER.info("decoding " + outFileName);

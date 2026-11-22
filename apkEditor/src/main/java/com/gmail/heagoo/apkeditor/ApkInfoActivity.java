@@ -155,6 +155,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
     private TextView decodeResultDetail;
     private View decodeResultLayout;
     private TextView decodeResultTitle;
+    private boolean decodeResultExpanded;
     protected String decodeRootPath;
     private ArrayList<String> deletedFiles;
     private ImageView dex2smaliImage;
@@ -1235,6 +1236,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             this.decodeResultTitle = (TextView) findViewById(R.id.decode_result_title);
             this.decodeResultDetail = (TextView) findViewById(R.id.decode_result_detail);
             findViewById(R.id.down_arrow_container).setOnClickListener(this);
+            this.decodeResultTitle.setOnClickListener(this);
         } else {
             this.dexDecodeLayout.setVisibility(8);
         }
@@ -1266,6 +1268,10 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         ApkParseThread worker = this.parseThread;
         if (worker != null) {
             report.append(worker.getStageTimings()).append('\n');
+            String stackTrace = worker.getErrorStackTrace();
+            if (stackTrace != null && !stackTrace.isEmpty()) {
+                report.append("Exception stack trace:\n").append(stackTrace).append('\n');
+            }
         }
         if (worker != null && worker.isAlive()) {
             report.append("Thread: ").append(worker.getState()).append('\n');
@@ -1378,8 +1384,8 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             decodeDex(null);
             return;
         }
-        if (id == R.id.down_arrow_container) {
-            this.dexDecodeLayout.setVisibility(8);
+        if (id == R.id.down_arrow_container || id == R.id.decode_result_title) {
+            showDecodeResultDetails();
             return;
         }
         if (id == R.id.menu_rotate) {
@@ -4571,7 +4577,26 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         Toast.makeText((Context) this, (CharSequence) "Manifest editing is disabled (seems not a genuine version)", 1).show();
     }
 
+    private void showDecodeResultDetails() {
+        if (this.decodeResultDetail == null) return;
+        String detail = this.decodeResultDetail.getText().toString();
+        if (detail.length() == 0) return;
+        TextView message = new TextView(this);
+        message.setText(detail);
+        message.setTextIsSelectable(true);
+        int padding = (int) (16 * getResources().getDisplayMetrics().density);
+        message.setPadding(padding, padding, padding, padding);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.addView(message);
+        new AlertDialog.Builder(this)
+                .setTitle(this.decodeResultTitle.getText())
+                .setView(scroll)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
+    }
+
     public void dexDecodingStarted() {
+        this.decodeResultExpanded = false;
         this.dexConversionInProgress = true;
         this.dex2smaliImage.setVisibility(4);
         this.decodeResultLayout.setVisibility(4);
@@ -4606,7 +4631,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                 this.decodeResultTitle.setText(R.string.succeed_with_warning);
                 String content = getString(R.string.warning) + ": " + strWarning;
                 this.decodeResultDetail.setText(content);
-                this.decodeResultDetail.setVisibility(0);
+                this.decodeResultDetail.setVisibility(View.GONE);
             } else {
                 showResult = false;
                 this.decodeResultTitle.setText(R.string.succeed);
@@ -4614,7 +4639,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             }
         } else {
             this.decodeResultTitle.setText(R.string.failed);
-            this.decodeResultDetail.setVisibility(0);
+            this.decodeResultDetail.setVisibility(View.GONE);
             if (strError != null) {
                 this.decodeResultDetail.setText(strError);
             } else {
@@ -4625,6 +4650,8 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         this.decodeProgressBar.setVisibility(4);
         this.decodeProgressText.setVisibility(8);
         this.decodeProgressRow.setVisibility(8);
+        this.decodeResultExpanded = false;
+        this.decodeResultDetail.setVisibility(View.GONE);
         if (showResult) {
             this.decodeResultLayout.setVisibility(0);
         } else {

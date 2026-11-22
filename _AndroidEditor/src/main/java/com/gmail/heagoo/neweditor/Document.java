@@ -1,6 +1,7 @@
 package com.gmail.heagoo.neweditor;
 
 import android.content.Context;
+import android.util.Log;
 import android.text.Spannable;
 import android.text.style.CharacterStyle;
 import android.widget.EditText;
@@ -63,6 +64,7 @@ public class Document implements Serializable {
                 parser.parse(isrc);
                 this.mTokenMarker = xmh.getTokenMarker();
             } catch (Throwable th) {
+                Log.w("TextEditor", "Unable to load syntax highlighting mode " + this.syntaxName, th);
             }
         } catch (ParserConfigurationException e2) {
             e2.printStackTrace();

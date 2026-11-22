@@ -13,6 +13,9 @@ import brut.directory.Directory;
 import com.gmail.heagoo.apkeditor.ApkDecoderMine;
 import com.gmail.heagoo.apkeditor.base.R;
 import com.gmail.heagoo.apkeditor.smali.ResSmaliIdProvider;
+import com.gmail.heagoo.apkeditor.util.ApkResourceLayout;
+import com.gmail.heagoo.apkeditor.util.ProtectedDexExtractor;
+import com.gmail.heagoo.apkeditor.util.ZipPathSanitizer;
 import com.gmail.heagoo.apklib.ManifestInfoCollector;
 import com.gmail.heagoo.common.IOUtils;
 import com.gmail.heagoo.common.RefInvoke;
@@ -24,6 +27,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
+import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -31,12 +35,15 @@ import java.util.zip.ZipFile;
 public class ApkParseThread extends Thread {
     private WeakReference<Activity> activityRef;
     private ResPackage apkPackage;
+    private String manifestPackageName;
     private String apkPath;
+    private File sanitizedApkFile;
     private volatile boolean cancelled;
     private WeakReference<ApkParseConsumer> consumerRef;
     private String decodeRootPath;
     private volatile ApkDecoderMine decoder;
     private String errMessage;
+    private volatile String errorStackTrace;
     private ResSmaliIdProvider idProvider;
     private boolean isFullDecoding;
     private boolean mApkProtected;
@@ -206,6 +213,7 @@ public class ApkParseThread extends Thread {
             // ...) used to escape and kill this thread silently, leaving the
             // loading screen hanging on the last progress label.
             Log.e("ApkParse", "APK decoding failed", t);
+            this.errorStackTrace = Log.getStackTraceString(t);
             if (this.errMessage == null) {
                 this.errMessage = t instanceof OutOfMemoryError
                         ? "OutOfMemoryError: insufficient memory while opening the APK"
@@ -213,6 +221,8 @@ public class ApkParseThread extends Thread {
             }
         } finally {
             this.finished = true;
+            File sanitized = this.sanitizedApkFile;
+            if (sanitized != null) sanitized.delete();
         }
         if (!success) {
             reportFailure(this.errMessage);
@@ -266,9 +276,12 @@ public class ApkParseThread extends Thread {
                 bArr3 = new byte[97];
                 readAssetFile(activity, "dummy.9.png", bArr3);
             }
-            ExtFile extFile = new ExtFile(new File(this.apkPath));
+            File sourceApk = new File(this.apkPath);
+            File safeApk = ZipPathSanitizer.sanitize(sourceApk, activity.getCacheDir());
+            if (!safeApk.equals(sourceApk)) this.sanitizedApkFile = safeApk;
+            ExtFile extFile = new ExtFile(safeApk);
             Directory directory = extFile.getDirectory();
-            this.mApkProtected = !directory.containsDir("res");
+            this.mApkProtected = !ApkResourceLayout.hasStandardResourceFiles(directory);
             if (this.mApkProtected) {
                 if (!directory.containsDir("r")) {
                     if (!directory.containsDir("R")) {
@@ -281,23 +294,33 @@ public class ApkParseThread extends Thread {
                     ManifestInfoCollector manifestInfoCollector = new ManifestInfoCollector();
                     manifestInfoCollector.parse(fileInput, "manifest", "package");
                     String value = manifestInfoCollector.getValue();
+                    this.manifestPackageName = value;
                     fileInput.close();
-                    InputStream fileInput2 = directory.getFileInput("classes.dex");
                     String makeWorkingDir = SDCard.makeWorkingDir(activity);
-                    String str = makeWorkingDir + "classes.dex";
-                    FileOutputStream fileOutputStream = new FileOutputStream(str);
-                    IOUtils.copy(fileInput2, fileOutputStream);
-                    fileInput2.close();
-                    fileOutputStream.close();
+                    File workingDir = new File(makeWorkingDir);
+                    List<File> dexFiles = ProtectedDexExtractor.isSupported(directory)
+                            ? ProtectedDexExtractor.extract(directory, workingDir)
+                            : new java.util.ArrayList<File>();
+                    if (dexFiles.isEmpty()) {
+                        // Keep the legacy path for protectors that leave their loader DEX
+                        // unencrypted at the archive root.
+                        InputStream fileInput2 = directory.getFileInput("classes.dex");
+                        File loaderDex = new File(workingDir, "classes.dex");
+                        FileOutputStream fileOutputStream = new FileOutputStream(loaderDex);
+                        IOUtils.copy(fileInput2, fileOutputStream);
+                        fileInput2.close();
+                        fileOutputStream.close();
+                        dexFiles.add(loaderDex);
+                    }
                     z = false;
                     z2 = true;
                     try {
-                        try {
-                            RefInvoke.invokeStaticMethod("com.gmail.heagoo.apkeditor.plus.ResourceDecoder", "decodeResources", new Class[]{String.class, String.class}, new Object[]{str, makeWorkingDir});
-                            this.idProvider = new ResSmaliIdProvider(makeWorkingDir, value);
-                        } catch (Exception e) {
+                        for (File dexFile : dexFiles) {
+                            RefInvoke.invokeStaticMethod("com.gmail.heagoo.apkeditor.plus.ResourceDecoder", "decodeResources", new Class[]{String.class, String.class}, new Object[]{dexFile.getAbsolutePath(), makeWorkingDir});
                         }
-                    } catch (Exception e2) {
+                        this.idProvider = new ResSmaliIdProvider(makeWorkingDir, value);
+                    } catch (Exception dexDecodeError) {
+                        Log.w("ApkParse", "Could not extract R classes from protected DEX payload", dexDecodeError);
                     }
                 } catch (Exception e3) {
                     z = false;
@@ -364,10 +387,14 @@ public class ApkParseThread extends Thread {
                 return true;
             } catch (Exception e4) {
                 this.errMessage = e4.toString();
-                e4.printStackTrace();
+                this.errorStackTrace = Log.getStackTraceString(e4);
+                Log.e("ApkParse", "APK resource decode failed", e4);
                 return z;
             }
         } catch (Exception e5) {
+            Log.e("ApkParse", "APK failed before resource decoding started", e5);
+            this.errorStackTrace = Log.getStackTraceString(e5);
+            this.errMessage = e5.getMessage() != null ? e5.getMessage() : e5.toString();
             z = false;
         }
         return z;
@@ -407,6 +434,30 @@ public class ApkParseThread extends Thread {
                     break;
                 }
                 break;
+        }
+        if (this.apkPackage == null && pkgs.length > 0) {
+            // Some protected APKs retain the standard ZIP filenames, so
+            // mApkProtected alone cannot identify them. Their resource table may
+            // contain many decoy package chunks; select the manifest package when
+            // possible, otherwise choose the package with the most resource specs.
+            // This is also a safe fallback for ordinary APKs with extra package chunks.
+            if (this.manifestPackageName != null) {
+                for (ResPackage candidate : pkgs) {
+                    if (candidate != null && this.manifestPackageName.equals(candidate.getName())) {
+                        this.apkPackage = candidate;
+                        break;
+                    }
+                }
+            }
+            for (ResPackage candidate : pkgs) {
+                if (this.apkPackage != null) break;
+                if (candidate == null || "android".equals(candidate.getName())
+                        || "com.htc".equals(candidate.getName())) continue;
+                if (this.apkPackage == null
+                        || candidate.getResSpecCount() > this.apkPackage.getResSpecCount()) {
+                    this.apkPackage = candidate;
+                }
+            }
         }
         if (this.apkPackage == null) {
             throw new AndrolibException("Arsc files with zero or multiple packages");
@@ -483,6 +534,10 @@ public class ApkParseThread extends Thread {
 
     public String getErrMessage() {
         return this.errMessage;
+    }
+
+    public String getErrorStackTrace() {
+        return this.errorStackTrace;
     }
 
     public String getResourceRootPath() {

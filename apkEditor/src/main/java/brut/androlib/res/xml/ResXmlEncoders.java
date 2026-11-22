@@ -28,6 +28,9 @@ import brut.util.StringUtils;
 public final class ResXmlEncoders {
 
     public static String escapeXmlChars(String str) {
+        if (str == null) {
+            return null;
+        }
         return StringUtils.replace(StringUtils.replace(str, "&", "&amp;"), "<", "&lt;");
     }
 

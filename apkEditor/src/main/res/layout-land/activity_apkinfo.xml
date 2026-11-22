@@ -414,6 +414,7 @@
                                 android:background="?labHeader" />
 
                             <ImageView
+                                android:id="@+id/decode_result_arrow"
                                 android:layout_width="24dip"
                                 android:layout_height="12dip"
                                 android:layout_marginTop="8dip"
