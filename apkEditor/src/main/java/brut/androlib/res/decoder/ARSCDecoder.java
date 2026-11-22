@@ -74,6 +74,10 @@ public class ARSCDecoder {
     // prevents a corrupt count from forcing a large object-array allocation even
     // when a malformed chunk advertises an implausibly large size.
     private static final int MAX_COMPLEX_ENTRY_ITEMS = 65536;
+    // A resource table should contain only a small number of package chunks. Keep
+    // malformed packageCount values from turning into an unbounded array
+    // allocation before the first package can be validated.
+    private static final int MAX_PACKAGE_COUNT = 0xffff;
     private static final Logger LOGGER = Logger.getLogger(ARSCDecoder.class.getName());
     private static final int KNOWN_CONFIG_BYTES = 56;
     private final ExtDataInput mIn;
@@ -145,6 +149,9 @@ public class ARSCDecoder {
     private ResPackage[] readTableHeader() throws IOException, AndrolibException {
         nextChunkCheckType(Header.TYPE_TABLE);
         int packageCount = mIn.readInt();
+        if (packageCount < 0 || packageCount > MAX_PACKAGE_COUNT) {
+            throw new AndrolibException("Invalid resource package count: " + packageCount);
+        }
 
         mTableStrings = StringBlock.read(mIn);
         //dumpStrings(mTableStrings);
@@ -380,18 +387,27 @@ public class ARSCDecoder {
     private ResTypeSpec readSingleTableTypeSpec() throws AndrolibException, IOException {
         checkChunkType(Header.TYPE_SPEC_TYPE);
         int id = mIn.readUnsignedByte();
-        mIn.skipBytes(3);
+        if (id == 0 || id > mTypeNames.getCount()) {
+            throw new AndrolibException("Invalid resource type-spec ID: " + id);
+        }
+        if (mIn.skipBytes(3) != 3) {
+            throw new IOException("Truncated resource type-spec header");
+        }
         int entryCount = mIn.readInt();
         if (entryCount < 0 || entryCount > 0xffff) {
             throw new AndrolibException("Invalid resource type-spec entry count: " + entryCount);
         }
+        long flagsBytes = (long) entryCount * 4;
+        requireChunkBytes(flagsBytes, "type-spec flags");
 
         if (mFlagsOffsets != null) {
             mFlagsOffsets.add(new FlagsOffset(mCountIn.getCount(), entryCount));
         }
 
         /* flags */
-        mIn.skipBytes(entryCount * 4);
+        if (mIn.skipBytes(entryCount * 4) != entryCount * 4) {
+            throw new IOException("Truncated resource type-spec flags");
+        }
         mTypeSpec = new ResTypeSpec(mTypeNames.getString(id - 1), mResTable, mPkg, id, entryCount);
         mPkg.addType(mTypeSpec);
         this.mMissingResSpecsDone = false;
@@ -406,11 +422,15 @@ public class ARSCDecoder {
         mIn.readFully(perfBuf);
         int typeId = perfBuf[0] & 0xff;
         int typeFlags = perfBuf[1] & 0xff;
-        ResTypeSpec typeSpec = mResTypeSpecs.get(typeId);
-        if (typeSpec != null) {
-            mResId = (0xff000000 & mResId) | typeSpec.getId() << 16;
-            mTypeSpec = typeSpec;
+        if (typeId == 0 || typeId > mTypeNames.getCount()) {
+            throw new AndrolibException("Invalid resource type ID: " + typeId);
         }
+        ResTypeSpec typeSpec = mResTypeSpecs.get(typeId);
+        if (typeSpec == null) {
+            throw new AndrolibException("Resource type has no matching type-spec: " + typeId);
+        }
+        mResId = (0xff000000 & mResId) | typeSpec.getId() << 16;
+        mTypeSpec = typeSpec;
         if ((typeFlags & (TYPE_FLAG_SPARSE | TYPE_FLAG_OFFSET16))
                 == (TYPE_FLAG_SPARSE | TYPE_FLAG_OFFSET16)) {
             throw new AndrolibException("Resource type cannot use sparse and offset16 indexes together");
@@ -798,6 +818,10 @@ public class ARSCDecoder {
         if (size < 28) {
             throw new AndrolibException("Config size < 28");
         }
+        if ((long) size - 4 > remainingChunkBytes()) {
+            throw new AndrolibException("Config size exceeds type chunk: " + size
+                    + " bytes, remaining " + (remainingChunkBytes() + 4));
+        }
 
         boolean isInvalid = false;
 
@@ -1047,8 +1071,12 @@ public class ARSCDecoder {
     private void skipToChunkEnd() throws IOException {
         while (mCountIn.getCount() < mHeader.endPosition) {
             long skipped = mCountIn.skip(mHeader.endPosition - mCountIn.getCount());
-            if (skipped <= 0 && mCountIn.read() < 0) {
-                break;
+            if (skipped > 0) {
+                continue;
+            }
+            if (mCountIn.read() < 0) {
+                throw new EOFException("Truncated resource chunk type 0x"
+                        + Integer.toHexString(mHeader.type & 0xffff));
             }
         }
     }
@@ -1101,7 +1129,15 @@ public class ARSCDecoder {
             } catch (EOFException ex) {
                 return new Header(TYPE_NONE, 0, 0, countIn.getCount());
             }
-            return new Header(type, in.readShort(), in.readInt(), start);
+            int headerSize = in.readUnsignedShort();
+            int chunkSize = in.readInt();
+            if (headerSize < 8 || chunkSize < headerSize
+                    || chunkSize > Integer.MAX_VALUE - start) {
+                throw new IOException(String.format(
+                        "Invalid resource chunk header: type=0x%04x, header=%d, size=%d, start=%d",
+                        type & 0xffff, headerSize, chunkSize, start));
+            }
+            return new Header(type, headerSize, chunkSize, start);
         }
     }
 

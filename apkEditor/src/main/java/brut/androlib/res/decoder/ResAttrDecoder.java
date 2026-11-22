@@ -207,11 +207,11 @@ public class ResAttrDecoder {
             case ANDROID_ATTR_FOREGROUND_SERVICE_TYPE:
                 return renderFlags(scalar,
                         new int[]{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048,
-                                8192, 0x40000000},
+                                4096, 8192, 0x40000000},
                         new String[]{"dataSync", "mediaPlayback", "phoneCall", "location",
                                 "connectedDevice", "mediaProjection", "camera", "microphone",
                                 "health", "remoteMessaging", "systemExempted", "shortService",
-                                "mediaProcessing", "specialUse"});
+                                "fileManagement", "mediaProcessing", "specialUse"});
             default:
                 return null;
         }

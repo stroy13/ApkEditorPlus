@@ -41,6 +41,9 @@ public class ResAttrDecoderTest {
                         WINDOW_SOFT_INPUT_MODE, "windowSoftInputMode"));
         assertEquals("specialUse", decoder.decode(TypedValue.TYPE_STRING, 0,
                 "0x40000000", FOREGROUND_SERVICE_TYPE, "foregroundServiceType"));
+        assertEquals("fileManagement|mediaProcessing|specialUse",
+                decoder.decode(TypedValue.TYPE_STRING, 0, "0x40003000",
+                        FOREGROUND_SERVICE_TYPE, "foregroundServiceType"));
     }
 
     @Test
