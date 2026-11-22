@@ -341,6 +341,21 @@ public class ApkBuildPipelineTest {
     }
 
     @Test
+    public void unsignedMergeKeepsManifestAndResourceTable() throws Exception {
+        File source = sourceApk();
+        File target = new File(folder.getRoot(), "unsigned-assembled.apk");
+        ApkBuildPipeline.mergeUnsigned(source, target, null, null, null, 0, -1, null);
+        assertTrue(target.isFile());
+        ApkBuildPipeline.validateResourceArchive(target);
+        try (ZipFile zip = new ZipFile(target)) {
+            assertNotNull(zip.getEntry("AndroidManifest.xml"));
+            assertNotNull(zip.getEntry("resources.arsc"));
+            assertNotNull(zip.getEntry("classes.dex"));
+            assertTrue(zip.getEntry("META-INF/CERT.RSA") == null);
+        }
+    }
+
+    @Test
     public void invalidEditedManifestIsRejectedBeforePublish() throws Exception {
         File source = sourceApk();
         File target = new File(folder.getRoot(), "gen_signed.apk");

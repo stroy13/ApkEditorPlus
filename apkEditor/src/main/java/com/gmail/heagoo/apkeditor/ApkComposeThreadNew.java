@@ -13,10 +13,11 @@ import com.gmail.heagoo.apkeditor.util.Aapt2ResourceTypes;
 import com.gmail.heagoo.apkeditor.util.Aapt2ResourceTableFallback;
 import com.gmail.heagoo.apkeditor.util.MissingResourceAttributes;
 import com.gmail.heagoo.apkeditor.util.SignHelper;
+import com.gmail.heagoo.apkeditor.util.ApkBuildPipeline;
 import com.gmail.heagoo.apkeditor.util.ComposeBuildTrace;
 import com.gmail.heagoo.apkeditor.util.ModifiedTree;
+import com.gmail.heagoo.apkeditor.util.ManifestResourceReferenceNormalizer;
 import com.gmail.heagoo.apkeditor.util.ToolFramework;
-import com.gmail.heagoo.apkeditor.util.ZipEngine;
 import com.gmail.heagoo.common.CommandRunner;
 import com.gmail.heagoo.common.ITaskCallback;
 import com.gmail.heagoo.common.SDCard;
@@ -27,7 +28,6 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -335,7 +335,6 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
     }
 
     private void mergeApk() throws IOException {
-        char c;
         if (this.originalApkPath != null
                 && Aapt2ResourceTableFallback.restoreOriginalIfEmpty(this.resourceApkPath, this.originalApkPath)
                 && this.buildTrace != null && this.buildTrace.logger() != null) {
@@ -375,44 +374,19 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
             collectFiles(filesToAdd, unknownDir, "");
         }
         collectDexFiles(filesToAdd);
-        StringBuilder sb = new StringBuilder();
-        Iterator<Map.Entry<String, String>> it = filesToAdd.entrySet().iterator();
-        int addLen = 0;
-        while (true) {
-            c = '\n';
-            if (!it.hasNext()) {
-                break;
-            }
-            Map.Entry<String, String> entry = it.next();
-            String key = entry.getKey();
-            String value = entry.getValue();
-            sb.append(key);
-            sb.append('\n');
-            sb.append(value);
-            sb.append('\n');
-            addLen += key.getBytes().length + value.getBytes().length + 2;
-        }
-        StringBuilder sb2 = new StringBuilder();
-        int replaceLen = 0;
-        for (Map.Entry<String, String> entry2 : extraReplaces.entrySet()) {
-            String key2 = entry2.getKey();
-            String value2 = entry2.getValue();
-            sb2.append(key2);
-            sb2.append(c);
-            sb2.append(value2);
-            sb2.append(c);
-            replaceLen += key2.getBytes().length + value2.getBytes().length + 2;
-            filesToAdd = filesToAdd;
-            c = '\n';
-        }
         if (this.buildTrace != null && this.buildTrace.logger() != null) {
             this.buildTrace.logger().log("Merge file collection and mapping: " + filesToAdd.size()
                     + " files; " + (System.nanoTime() - collectStarted) / 1000000L + " ms");
         }
         long zipStarted = System.nanoTime();
-        ZipEngine.modify(this.ctx, this.targetApkPath, this.resourceApkPath, sb.toString(), addLen, "", 0, sb2.toString(), replaceLen);
+        Map<String, String> added = filesToAdd;
+        Map<String, String> replaced = extraReplaces;
+        ApkBuildPipeline.mergeUnsigned(
+                new File(this.resourceApkPath), new File(this.targetApkPath),
+                replaced, added, null, 0, -1,
+                this.buildTrace == null ? null : this.buildTrace.logger());
         if (this.buildTrace != null && this.buildTrace.logger() != null) {
-            this.buildTrace.logger().log("Merge ZIP engine: " + (System.nanoTime() - zipStarted) / 1000000L + " ms");
+            this.buildTrace.logger().log("Merge Java ZIP pipeline: " + (System.nanoTime() - zipStarted) / 1000000L + " ms");
         }
     }
 
@@ -445,17 +419,36 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
     }
 
     private boolean needRebuildResource() throws IOException {
+        File manifest = new File(this.decodedFilePath + "/AndroidManifest.xml");
+        File res = new File(this.decodedFilePath + "/res");
+        // An existing resource.apk may have been produced by an older parser and
+        // still contain decimal/@0x references. Normalize before the cache check so
+        // a saved decoded project cannot silently reuse that stale binary manifest.
+        boolean normalized = ManifestResourceReferenceNormalizer.normalize(
+                manifest, res, this.buildTrace == null ? null : this.buildTrace.logger());
         File apkFile = new File(this.resourceApkPath);
         if (!apkFile.isFile() || !apkFile.exists()) {
             return true;
         }
+        try {
+            ApkBuildPipeline.validateResourceArchive(apkFile);
+        } catch (IOException invalid) {
+            if (this.buildTrace != null && this.buildTrace.logger() != null) {
+                this.buildTrace.logger().log("Cached resource APK rejected; rebuilding: "
+                        + invalid.getMessage());
+            }
+            return true;
+        }
         long apkTime = apkFile.lastModified();
-        return ModifiedTree.atLeast(new File(this.decodedFilePath + "/AndroidManifest.xml"), apkTime)
-                || ModifiedTree.atLeast(new File(this.decodedFilePath + "/res"), apkTime);
+        return normalized || ModifiedTree.atLeast(manifest, apkTime)
+                || ModifiedTree.atLeast(res, apkTime);
     }
 
     private boolean signApk() {
-        String signedPath = this.targetApkPath + ".signed";
+        // Keep the temporary result APK-like while SignHelper performs its final
+        // framework validation. The final published path remains the normal .apk
+        // name, and a failed validation can never replace it with this staging file.
+        String signedPath = this.targetApkPath + ".signed.apk";
         try {
             Map<String, String> emptyMap = new HashMap<>();
             Set<String> emptySet = new HashSet<>();
@@ -484,6 +477,10 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
 
     private boolean composeResource() {
         try {
+            ManifestResourceReferenceNormalizer.normalize(
+                    new File(this.decodedFilePath + "/AndroidManifest.xml"),
+                    new File(this.decodedFilePath + "/res"),
+                    this.buildTrace == null ? null : this.buildTrace.logger());
             String selectedFramework = ToolFramework.selected(this.ctx, this.androidJarPath);
             String aaptChoice = PreferenceManager.getDefaultSharedPreferences(this.ctx).getString("AaptVersion", "legacy");
             if ("aapt2".equals(aaptChoice) || "aapt2-37".equals(aaptChoice)) {
@@ -499,8 +496,16 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
                         }
                         String aapt2 = new File(this.ctx.getApplicationInfo().nativeLibraryDir, newest ? "libaapt2_37.so" : "libaapt2_exec.so").getAbsolutePath();
                         Aapt2Pipeline.build(aapt2, selectedFramework, this.decodedFilePath + "/res", this.decodedFilePath + "/AndroidManifest.xml", this.resourceApkPath, this.buildTrace == null ? null : this.buildTrace.logger());
+                        File output = new File(this.resourceApkPath);
+                        ApkBuildPipeline.validateResourceArchive(output);
+                        if (this.buildTrace != null && this.buildTrace.logger() != null) {
+                            this.buildTrace.logger().log("AAPT2 resource archive validated: "
+                                    + output.length() + " bytes");
+                        }
                         return true;
                     } catch (Exception e) {
+                        File failedOutput = new File(this.resourceApkPath);
+                        if (failedOutput.exists()) failedOutput.delete();
                         // A renamed type that only ever held values has no
                         // directory to spot, so the compiler is the one that
                         // finds it. Fall back rather than fail the build.
@@ -546,7 +551,20 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
                     this.buildTrace == null ? null : this.buildTrace.logger());
             LOGGER.info("stdout: " + cr.getStdOut() + ", ret=" + ret);
             if (ret) {
-                return true;
+                try {
+                    ApkBuildPipeline.validateResourceArchive(new File(this.resourceApkPath));
+                    if (this.buildTrace != null && this.buildTrace.logger() != null) {
+                        this.buildTrace.logger().log("Legacy AAPT resource archive validated: "
+                                + new File(this.resourceApkPath).length() + " bytes");
+                    }
+                    return true;
+                } catch (IOException invalid) {
+                    File output = new File(this.resourceApkPath);
+                    if (output.exists()) output.delete();
+                    this.errMessage = "AAPT produced an invalid resource archive: "
+                            + invalid.getMessage();
+                    return false;
+                }
             }
             LOGGER.info("stderr: " + cr.getStdError());
             this.errMessage = cr.getStdError();

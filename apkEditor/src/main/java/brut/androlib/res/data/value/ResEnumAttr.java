@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import brut.androlib.AndrolibException;
+import brut.androlib.res.data.ResResSpec;
 import brut.androlib.res.data.ResResource;
 import brut.util.Duo;
 
@@ -75,8 +76,11 @@ public class ResEnumAttr extends ResAttr {
                 }
             }
             if (ref != null) {
-                value2 = ref.getReferent().getName();
-                mItemsCache.put(value, value2);
+                ResResSpec referent = ref.getReferent();
+                if (referent != null && referent.getName() != null) {
+                    value2 = referent.getName();
+                    mItemsCache.put(value, value2);
+                }
             }
         }
         return value2;

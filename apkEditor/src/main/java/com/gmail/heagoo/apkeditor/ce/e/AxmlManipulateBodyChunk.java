@@ -226,7 +226,7 @@ public class AxmlManipulateBodyChunk {
     private String getAttributeName(int attrNameIdx) {
         String name = stringChunk.getStringByIndex(attrNameIdx);
         if (name == null || name.equals("")) {
-            if (attrNameIdx < attrIdChunk.getCount()) {
+            if (attrNameIdx >= 0 && attrNameIdx < attrIdChunk.getCount()) {
                 name = ManifestParser
                         .getNameFromAttr(attrIdChunk.attrIdArray[attrNameIdx]);
             }

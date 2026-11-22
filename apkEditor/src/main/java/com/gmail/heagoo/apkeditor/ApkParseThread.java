@@ -6,7 +6,10 @@ import android.content.res.AssetManager;
 import android.util.Log;
 import brut.androlib.AndrolibException;
 import brut.androlib.res.data.ResPackage;
+import brut.androlib.res.data.ResResSpec;
+import brut.androlib.res.data.ResResource;
 import brut.androlib.res.data.ResTable;
+import brut.androlib.res.data.value.ResStringValue;
 import brut.androlib.res.decoder.ARSCDecoder;
 import brut.androlib.res.util.ExtFile;
 import brut.directory.Directory;
@@ -347,6 +350,9 @@ public class ApkParseThread extends Thread {
                 }
                 progress(5);
                 this.resTable.getPackage(1);
+                Log.i("ApkParse", "Framework parser gate: "
+                        + this.resTable.getFrameworkLoadInfo() + "; "
+                        + getResourceDiagnostics());
                 if (this.cancelled) {
                     return z;
                 }
@@ -415,56 +421,174 @@ public class ApkParseThread extends Thread {
 
     private ResPackage loadMainPkg(ResTable resTable, ExtFile apkFile) throws AndrolibException {
         LOGGER.info("Loading resource table of apk file...");
-        ResPackage[] pkgs = getResPackagesFromApk(apkFile, resTable, sKeepBroken);
+        // Protected tables frequently carry qualifier bytes newer than this
+        // decoder knows. Keep those entries so a single invalid configuration does
+        // not remove every string resource from the project.
+        boolean keepBroken = sKeepBroken || this.mApkProtected;
+        ResPackage[] pkgs = getResPackagesFromApk(apkFile, resTable, keepBroken);
         if (pkgs == null) {
+            Log.w("ApkParse", "Resource table returned no packages");
             return null;
         }
-        switch (pkgs.length) {
-            case 1:
-                this.apkPackage = pkgs[0];
+        // A normal APK can still contain a newer/invalid qualifier. If the first
+        // pass produced no string resources, retry once with broken configs kept;
+        // otherwise the String tab sees an apparently valid package with zero
+        // values even though the table contains them.
+        if (!keepBroken && countStringResources(pkgs) == 0) {
+            Log.w("ApkParse", "No string resources after strict table decode; retrying with keepBroken");
+            pkgs = getResPackagesFromApk(apkFile, resTable, true);
+            if (pkgs == null) {
+                Log.w("ApkParse", "keepBroken resource table retry returned no packages");
+                return null;
+            }
+        }
+        Log.i("ApkParse", describePackages(pkgs));
+        // Do not trust package-array order. Protected/resource-virtualized APKs
+        // can contain decoy package chunks, and a one-package table can still be a
+        // stringless decoy. Prefer the manifest package only when it actually has
+        // string resources; otherwise choose the non-framework package with the
+        // strongest string-resource signal.
+        this.apkPackage = null;
+        ResPackage manifestCandidate = null;
+        for (ResPackage candidate : pkgs) {
+            if (candidate != null && !isFrameworkPackage(candidate)
+                    && this.manifestPackageName != null
+                    && this.manifestPackageName.equals(candidate.getName())) {
+                manifestCandidate = candidate;
                 break;
-            case 2:
-                if (pkgs[0].getName().equals("android")) {
-                    LOGGER.warning("Skipping \"android\" package group");
-                    this.apkPackage = pkgs[1];
-                    break;
-                } else if (pkgs[0].getName().equals("com.htc")) {
-                    LOGGER.warning("Skipping \"htc\" package group");
-                    this.apkPackage = pkgs[1];
-                    break;
+            }
+        }
+        if (manifestCandidate != null && countStringResources(manifestCandidate) > 0) {
+            this.apkPackage = manifestCandidate;
+        }
+        if (this.apkPackage == null) {
+            ResPackage bestCandidate = null;
+            int bestStringResources = -1;
+            int bestManifestMatch = -1;
+            int bestPrivatePackage = -1;
+            int bestSpecCount = -1;
+            for (ResPackage candidate : pkgs) {
+                if (candidate == null || isFrameworkPackage(candidate)) {
+                    continue;
                 }
-                break;
+                int stringResources = countStringResources(candidate);
+                int manifestMatch = candidate == manifestCandidate ? 1 : 0;
+                int privatePackage = candidate.getId() == 0x7f ? 1 : 0;
+                int specCount = candidate.getResSpecCount();
+                if (bestCandidate == null || stringResources > bestStringResources
+                        || (stringResources == bestStringResources
+                        && (manifestMatch > bestManifestMatch
+                        || (manifestMatch == bestManifestMatch
+                        && (privatePackage > bestPrivatePackage
+                        || (privatePackage == bestPrivatePackage
+                        && specCount > bestSpecCount)))))) {
+                    bestCandidate = candidate;
+                    bestStringResources = stringResources;
+                    bestManifestMatch = manifestMatch;
+                    bestPrivatePackage = privatePackage;
+                    bestSpecCount = specCount;
+                }
+            }
+            this.apkPackage = bestCandidate;
         }
         if (this.apkPackage == null && pkgs.length > 0) {
-            // Some protected APKs retain the standard ZIP filenames, so
-            // mApkProtected alone cannot identify them. Their resource table may
-            // contain many decoy package chunks; select the manifest package when
-            // possible, otherwise choose the package with the most resource specs.
-            // This is also a safe fallback for ordinary APKs with extra package chunks.
-            if (this.manifestPackageName != null) {
-                for (ResPackage candidate : pkgs) {
-                    if (candidate != null && this.manifestPackageName.equals(candidate.getName())) {
-                        this.apkPackage = candidate;
-                        break;
-                    }
-                }
-            }
-            for (ResPackage candidate : pkgs) {
-                if (this.apkPackage != null) break;
-                if (candidate == null || "android".equals(candidate.getName())
-                        || "com.htc".equals(candidate.getName())) continue;
-                if (this.apkPackage == null
-                        || candidate.getResSpecCount() > this.apkPackage.getResSpecCount()) {
-                    this.apkPackage = candidate;
-                }
-            }
+            // All candidates were framework-like. Keep the first package so the
+            // existing decoder can report a useful result instead of failing with
+            // a null package.
+            this.apkPackage = pkgs[0];
         }
         if (this.apkPackage == null) {
             throw new AndrolibException("Arsc files with zero or multiple packages");
         }
         resTable.addPackage(this.apkPackage, true);
+        Log.i("ApkParse", "Selected resource package: "
+                + describePackage(this.apkPackage));
         LOGGER.info("Loaded.");
         return this.apkPackage;
+    }
+
+    private boolean isFrameworkPackage(ResPackage pkg) {
+        return pkg != null && (pkg.getId() == 1
+                || "android".equals(pkg.getName())
+                || "com.htc".equals(pkg.getName()));
+    }
+
+    private String describePackages(ResPackage[] packages) {
+        StringBuilder result = new StringBuilder("Resource table packages=")
+                .append(packages.length).append(" [");
+        for (int i = 0; i < packages.length; i++) {
+            if (i != 0) {
+                result.append(", ");
+            }
+            result.append(describePackage(packages[i]));
+        }
+        return result.append(']').toString();
+    }
+
+    private String describePackage(ResPackage pkg) {
+        if (pkg == null) {
+            return "null";
+        }
+        return "id=0x" + Integer.toHexString(pkg.getId())
+                + ", name=" + pkg.getName()
+                + ", specs=" + pkg.getResSpecCount()
+                + ", types=" + pkg.listTypes().size()
+                + ", stringSpecs=" + countStringSpecs(pkg)
+                + ", stringResources=" + countStringResources(pkg);
+    }
+
+    public String getResourceDiagnostics() {
+        return "protected=" + this.mApkProtected + "; "
+                + describePackage(this.apkPackage) + "; framework="
+                + (this.resTable == null ? "not initialized" : this.resTable.getFrameworkLoadInfo());
+    }
+
+    private int countStringSpecs(ResPackage pkg) {
+        int count = 0;
+        for (ResResSpec spec : pkg.listResSpecs()) {
+            if (isStringResourceSpec(spec)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int countStringResources(ResPackage[] packages) {
+        int count = 0;
+        if (packages == null) {
+            return 0;
+        }
+        for (ResPackage pkg : packages) {
+            if (!isFrameworkPackage(pkg)) {
+                count += countStringResources(pkg);
+            }
+        }
+        return count;
+    }
+
+    private int countStringResources(ResPackage pkg) {
+        int count = 0;
+        for (ResResSpec spec : pkg.listResSpecs()) {
+            if (isStringResourceSpec(spec) && spec.getAllResources() != null) {
+                count += spec.getAllResources().size();
+            }
+        }
+        return count;
+    }
+
+    private boolean isStringResourceSpec(ResResSpec spec) {
+        if (spec == null || spec.getType() == null) {
+            return false;
+        }
+        if ("string".equalsIgnoreCase(spec.getType().getName())) {
+            return true;
+        }
+        for (ResResource resource : spec.listResources()) {
+            if (resource != null && resource.getValue() instanceof ResStringValue) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private ResPackage[] getResPackagesFromApk(ExtFile apkFile, ResTable resTable, boolean keepBroken) throws AndrolibException {

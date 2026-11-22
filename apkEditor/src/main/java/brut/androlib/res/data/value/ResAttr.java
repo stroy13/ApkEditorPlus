@@ -109,7 +109,11 @@ public class ResAttr extends ResBagValue implements ResValuesXmlSerializable {
 
     public String convertToResXmlFormat(ResScalarValue value)
             throws AndrolibException {
-        return null;
+        // Enum and flag attrs override this method. A plain framework attr still
+        // needs to retain the typed scalar value; returning null made the XML
+        // decoder fall back to an untyped/empty value for boolean, integer and
+        // reference attributes whenever the framework table had no bag metadata.
+        return value == null ? null : value.encodeAsResXmlAttr();
     }
 
     @Override

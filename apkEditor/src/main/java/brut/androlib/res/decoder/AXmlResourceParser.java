@@ -329,15 +329,12 @@ public class AXmlResourceParser implements XmlResourceParser {
     public String getAttributeNamespace(int index) {
         int offset = getAttributeOffset(index);
         int namespace = m_attributes[offset + ATTRIBUTE_IX_NAMESPACE_URI];
-        if (namespace == -1) {
-            return "";
-        }
 
         // hacky: if the attribute names are proguarded, then so are the namespace
         // I don't know where these are located yet in the file, but it is always
         // this.android_ns in testing, so we will default to that for now.
         // @todo figure out where proguarded namespaces are stored.
-        String value = m_strings.getString(namespace);
+        String value = namespace == -1 ? "" : m_strings.getString(namespace);
 
 //        if (value.length() == 0) {
 //            int offsetName = getAttributeOffset(index);
@@ -349,11 +346,15 @@ public class AXmlResourceParser implements XmlResourceParser {
 
         // Added by Pujiang
         if (value == null || value.length() == 0) {
-            // Attr name is like 0x7fxxxxxx, revise the namespace
+            // The namespace string can be damaged independently of the attribute
+            // name. Use the resource-map package id as a second source: 0x01 is
+            // always the Android framework, while 0x7f is this APK's package.
             int name = m_attributes[offset + ATTRIBUTE_IX_NAME];
             int resourceId = m_resourceIDs != null && name >= 0 && name < m_resourceIDs.length
                     ? m_resourceIDs[name] : 0;
-            if (AndroidManifestAttributeNames.isFrameworkAttribute(resourceId)) {
+            int packageId = (resourceId >>> 24) & 0xff;
+            if (AndroidManifestAttributeNames.isFrameworkAttribute(resourceId)
+                    || packageId == 1) {
                 value = android_ns;
             } else if ((resourceId & 0x7f000000) == 0x7f000000) {
                 String appNamespace = getPossibleNamespace();
@@ -363,7 +364,7 @@ public class AXmlResourceParser implements XmlResourceParser {
             }
             // Original logical from apktool. Obfuscated manifests can contain
             // invalid string-pool indices, so do not dereference a missing name.
-            else {
+            if (value == null || value.length() == 0) {
                 String attributeName = m_strings.getString(name);
                 if (attributeName != null && attributeName.length() == 0) {
                     value = android_ns;
@@ -406,56 +407,52 @@ public class AXmlResourceParser implements XmlResourceParser {
     public String getAttributeName(int index) {
         int offset = getAttributeOffset(index);
         int name = m_attributes[offset + ATTRIBUTE_IX_NAME];
-        if (name == -1) {
-            return "";
-        }
 
-        // Pujiang modified: for protected apk, first try to get it from
-        // resource id
-        if (apkProtected) {
+        // Protected AXML can omit the string-pool name while retaining the
+        // resource-map entry. Do not return before the resource-ID fallback below
+        // gets a chance to recover the framework attribute name.
+        String value = name == -1 ? null : m_strings.getString(name);
+
+        // A valid string-pool name is the primary source of truth for ordinary
+        // APKs. Protected APKs may intentionally replace that name, so retain the
+        // resource-ID lookup for that mode; reject names synthesized by the
+        // protected resource parser and fall back to the binary XML name instead.
+        int resId = getAttributeNameResource(index);
+        String frameworkName = null;
+        if (mAttrDecoder != null && (apkProtected || value == null || value.length() == 0)) {
             try {
-                int resId = getAttributeNameResource(index);
-                if (resId != 0) {
-                    String value = mAttrDecoder.decodeManifestAttr(resId);
-                    if (value == null && AndroidManifestAttributeNames.isFrameworkAttribute(resId)) {
-                        String pooledName = m_strings.getString(name);
-                        if (AndroidManifestAttributeNames.isValidAttributeName(pooledName)) value = pooledName;
-                    }
-                    if (value == null) value = AndroidManifestAttributeNames.nameFor(resId);
-                    if (value != null) {
-                        return value;
-                    }
-                }
+                frameworkName = mAttrDecoder.decodeManifestAttr(resId);
             } catch (AndrolibException e) {
+                setFirstError(e);
             }
         }
-
-        String value = m_strings.getString(name);
-
-        // some attributes will return "", we must rely on the resource_id and refer to the frameworks
-        // to match the resource id to the name. ex: 0x101021C = versionName
-        if (value != null && value.length() != 0 && !android_ns.equals(getAttributeNamespace(index))) {
-            return value;
-        } else {
-            int resId = getAttributeNameResource(index);
-            try {
-                value = mAttrDecoder.decodeManifestAttr(resId);
-            } catch (AndrolibException e) {
-            }
-            if (value == null && AndroidManifestAttributeNames.isFrameworkAttribute(resId)) {
-                String pooledName = m_strings.getString(name);
-                if (AndroidManifestAttributeNames.isValidAttributeName(pooledName)) value = pooledName;
-            }
-            if (value == null) value = AndroidManifestAttributeNames.nameFor(resId);
-            if (value == null) {
-                // The framework resource table could not be loaded, so the attribute
-                // name is unknown. Returning null used to crash the XML serializer
-                // ("Could not decode AndroidManifest.xml"), a synthetic name lets the
-                // rest of the APK open normally.
-                value = resId != 0 ? String.format("attr_0x%08x", resId) : "";
-            }
+        if (frameworkName != null && frameworkName.length() != 0
+                && !isGeneratedResourceName(frameworkName)
+                && (apkProtected || value == null || value.length() == 0)) {
+            return frameworkName;
+        }
+        if (value != null && value.length() != 0) {
             return value;
         }
+        if (AndroidManifestAttributeNames.isFrameworkAttribute(resId)) {
+            String pooledName = name == -1 ? null : m_strings.getString(name);
+            if (AndroidManifestAttributeNames.isValidAttributeName(pooledName)) {
+                return pooledName;
+            }
+        }
+        String knownName = AndroidManifestAttributeNames.nameFor(resId);
+        if (knownName != null) {
+            return knownName;
+        }
+        // The framework resource table could not be loaded and the string pool
+        // did not contain a usable name. Keep a stable name so XML serialization
+        // can continue without a null attribute name.
+        return resId != 0 ? String.format("attr_0x%08x", resId) : "";
+    }
+
+    private static boolean isGeneratedResourceName(String name) {
+        return name.startsWith("noname_") || name.indexOf("_dup_") >= 0
+                || name.startsWith("attr_0x");
     }
 
     @Override
@@ -503,12 +500,33 @@ public class AXmlResourceParser implements XmlResourceParser {
                         rawValue = null;
                     }
                 }
+                int attrNameIndex = m_attributes[offset + ATTRIBUTE_IX_NAME];
+                String binaryAttrName = attrNameIndex == -1
+                        ? null : m_strings.getString(attrNameIndex);
                 String ret = mAttrDecoder.decode(
                         valueType,
                         valueData,
                         rawValue,
-                        getAttributeNameResource(index));
-                return ret;
+                        getAttributeNameResource(index),
+                        binaryAttrName);
+                // A missing current package used to turn typed values whose raw
+                // string index is -1 into an empty string. That is especially
+                // damaging for android:versionCode and other integer manifest
+                // attributes: aapt2 rejects the decoded XML before it can link.
+                // Preserve a genuinely empty string value, but recover typed data
+                // when the decoder could not produce text.
+                if (ret != null && (!ret.isEmpty() || valueRaw != -1
+                        || valueType == TypedValue.TYPE_NULL)) {
+                    return ret;
+                }
+                if (valueType == TypedValue.TYPE_STRING && valueData >= 0) {
+                    String stringValue = m_strings.getString(valueData);
+                    if (stringValue != null) {
+                        return ResXmlEncoders.escapeXmlChars(stringValue);
+                    }
+                }
+                String fallback = TypedValue.coerceToString(valueType, valueData);
+                return fallback != null ? fallback : (ret != null ? ret : "");
             } catch (AndrolibException ex) {
                 setFirstError(ex);
                 LOGGER.log(Level.WARNING, String.format("Could not decode attr value, using raw value "

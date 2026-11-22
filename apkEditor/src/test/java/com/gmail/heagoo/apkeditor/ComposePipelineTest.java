@@ -110,8 +110,21 @@ public class ComposePipelineTest {
 
     @Test
     public void signingStageActuallySigns() throws Exception {
-        String fresh = runBody(read("ApkComposeThreadNew.java"));
+        String freshSource = read("ApkComposeThreadNew.java");
+        String fresh = runBody(freshSource);
         assertTrue("the sign step must call signApk()", fresh.contains("if (!signApk()) {"));
+        assertTrue("framework validation must receive an APK-suffixed temporary path",
+                freshSource.contains("String signedPath = this.targetApkPath + \".signed.apk\";"));
+        String signHelper = new String(Files.readAllBytes(root().resolve(
+                "apkEditor/src/main/java/com/gmail/heagoo/apkeditor/util/SignHelper.java")), StandardCharsets.UTF_8);
+        assertTrue("the final gate must request framework component metadata",
+                signHelper.contains("PackageManager.GET_ACTIVITIES")
+                        && signHelper.contains("PackageManager.GET_SERVICES")
+                        && signHelper.contains("PackageManager.GET_RECEIVERS")
+                        && signHelper.contains("PackageManager.GET_PROVIDERS"));
+        assertTrue("the final gate must compare the framework package to the effective manifest",
+                signHelper.contains("Generated package mismatch")
+                        && signHelper.contains("validateOutputWithAndroid(ctx, new File(targetApkPath), effectiveManifest"));
         String legacy = runBody(read("ApkComposeThread.java"));
         assertTrue(legacy.contains("if (!signApk()) {"));
         assertTrue("unsigned builds still have to write the apk",

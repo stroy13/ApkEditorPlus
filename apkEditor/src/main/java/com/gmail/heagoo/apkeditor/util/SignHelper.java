@@ -164,7 +164,7 @@ public final class SignHelper {
         ApkBuildPipeline.build(new File(srcApkPath), new File(targetApkPath),
                 replacedFiles, addedFiles, deletedFiles, options, progress, cancellation, out);
         try {
-            validateOutputWithAndroid(ctx, new File(targetApkPath), out);
+            validateOutputWithAndroid(ctx, new File(targetApkPath), effectiveManifest, out);
         } catch (Exception e) {
             if (out != null) {
                 out.log("Android package parser rejected the generated APK; preserving signed output for diagnosis: " + e);
@@ -181,10 +181,20 @@ public final class SignHelper {
      * apksig + chunk validation do not catch every semantic manifest problem that
      * PackageInstaller rejects with "cannot parse package".
      */
-    private static void validateOutputWithAndroid(Context ctx, File apk, ApkBuildPipeline.Logger out)
+    private static void validateOutputWithAndroid(Context ctx, File apk,
+                                                   ManifestInfo expected,
+                                                   ApkBuildPipeline.Logger out)
             throws Exception {
         PackageManager pm = ctx.getPackageManager();
-        PackageInfo info = pm.getPackageArchiveInfo(apk.getAbsolutePath(), PackageManager.GET_META_DATA);
+        // Request component arrays so this check covers the same package metadata
+        // that Android will use at install time. GET_META_DATA is intentionally not
+        // requested: loading arbitrary application metadata is optional here and
+        // should not turn a valid package-identity check into a resource lookup.
+        int flags = PackageManager.GET_ACTIVITIES
+                | PackageManager.GET_SERVICES
+                | PackageManager.GET_RECEIVERS
+                | PackageManager.GET_PROVIDERS;
+        PackageInfo info = pm.getPackageArchiveInfo(apk.getAbsolutePath(), flags);
         if (info == null || info.applicationInfo == null || info.packageName == null) {
             ManifestInfo manifest = readManifest(apk);
             String splitDiagnostic = splitArchiveDiagnostic(manifest);
@@ -196,12 +206,41 @@ public final class SignHelper {
             throw new IOException("Android package parser cannot read generated APK; manifest="
                     + details + "; signature and ZIP structure passed, but Android installability is unverified: " + apk);
         }
+        if (expected != null && expected.packageName != null
+                && !expected.packageName.equals(info.packageName)) {
+            throw new IOException("Generated package mismatch: expected=" + expected.packageName
+                    + ", framework=" + info.packageName);
+        }
+        long versionCode = android.os.Build.VERSION.SDK_INT >= 28
+                ? info.getLongVersionCode() : info.versionCode;
+        if (expected != null && expected.versionCode >= 0
+                && versionCode != Integer.toUnsignedLong(expected.versionCode)) {
+            throw new IOException("Generated versionCode mismatch: expected="
+                    + Integer.toUnsignedLong(expected.versionCode) + ", framework=" + versionCode);
+        }
+        if (expected != null && expected.versionName != null
+                && !expected.versionName.equals(info.versionName)) {
+            throw new IOException("Generated versionName mismatch: expected=" + expected.versionName
+                    + ", framework=" + info.versionName);
+        }
+        if (expected != null && expected.applicationCls != null
+                && info.applicationInfo.className != null) {
+            String expectedApplication = resolveComponentName(expected.packageName, expected.applicationCls);
+            String frameworkApplication = resolveComponentName(info.packageName, info.applicationInfo.className);
+            if (!expectedApplication.equals(frameworkApplication)) {
+                throw new IOException("Generated application mismatch: expected=" + expectedApplication
+                        + ", framework=" + frameworkApplication);
+            }
+        }
         if (out != null) {
-            long versionCode = android.os.Build.VERSION.SDK_INT >= 28
-                    ? info.getLongVersionCode() : info.versionCode;
             out.log("Android package parser OK: package=" + info.packageName
                     + ", versionCode=" + versionCode
-                    + ", versionName=" + info.versionName);
+                    + ", versionName=" + info.versionName
+                    + ", application=" + info.applicationInfo.className
+                    + ", components={activities=" + count(info.activities)
+                    + ", services=" + count(info.services)
+                    + ", receivers=" + count(info.receivers)
+                    + ", providers=" + count(info.providers) + "}");
         }
         try (ZipFile zip = new ZipFile(apk)) {
             ZipEntry entry = zip.getEntry("AndroidManifest.xml");
@@ -225,6 +264,23 @@ public final class SignHelper {
                 }
             }
         }
+    }
+
+    private static int count(Object[] values) {
+        return values == null ? 0 : values.length;
+    }
+
+    private static String resolveComponentName(String packageName, String name) {
+        if (name == null || packageName == null) {
+            return name;
+        }
+        if (name.startsWith(".")) {
+            return packageName + name;
+        }
+        if (name.indexOf('.') < 0) {
+            return packageName + "." + name;
+        }
+        return name;
     }
 
     static String splitArchiveDiagnostic(ManifestInfo manifest) {

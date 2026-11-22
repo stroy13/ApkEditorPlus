@@ -53,6 +53,9 @@ public class ResReferenceValue extends ResIntValue implements Serializable {
 
         ResResSpec spec = getReferent();
         if (spec == null) {
+            // A numeric literal is not a reliable XML resource reference for the
+            // protected/typed values that this decoder feeds to AAPT2. Keep the
+            // output valid when the table cannot provide a symbolic name.
             return "@null";
         }
         boolean newId = spec.hasDefaultResource() && spec.getDefaultResource().getValue() instanceof ResIdValue;

@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 
 import brut.androlib.AndrolibException;
+import brut.androlib.res.data.ResResSpec;
 import brut.androlib.res.data.ResResource;
 import brut.util.Duo;
 
@@ -58,12 +59,14 @@ public class ResFlagsAttr extends ResAttr {
         int intVal = ((ResIntValue) value).getValue();
 
         if (intVal == 0) {
-            return renderFlags(mZeroFlags);
+            String zero = renderFlags(mZeroFlags);
+            return zero.isEmpty() ? super.convertToResXmlFormat(value) : zero;
         }
 
         FlagItem[] flagItems = new FlagItem[mFlags.length];
         int[] flags = new int[mFlags.length];
         int flagsCount = 0;
+        int knownMask = 0;
         for (int i = 0; i < mFlags.length; i++) {
             FlagItem flagItem = mFlags[i];
             int flag = flagItem.flag;
@@ -71,13 +74,20 @@ public class ResFlagsAttr extends ResAttr {
             if ((intVal & flag) != flag) {
                 continue;
             }
+            knownMask |= flag;
 
             if (!isSubpartOf(flag, flags)) {
                 flags[flagsCount] = flag;
                 flagItems[flagsCount++] = flagItem;
             }
         }
-        return renderFlags(Arrays.copyOf(flagItems, flagsCount));
+        if ((intVal & ~knownMask) != 0) {
+            // Do not silently drop a new platform bit and emit a partial value;
+            // retain the typed scalar so callers can still see what was stored.
+            return super.convertToResXmlFormat(value);
+        }
+        String rendered = renderFlags(Arrays.copyOf(flagItems, flagsCount));
+        return rendered.isEmpty() ? super.convertToResXmlFormat(value) : rendered;
     }
 
     @Override
@@ -106,7 +116,11 @@ public class ResFlagsAttr extends ResAttr {
     private String renderFlags(FlagItem[] flags) throws AndrolibException {
         String ret = "";
         for (int i = 0; i < flags.length; i++) {
-            ret += "|" + flags[i].getValue();
+            String name = flags[i].getValue();
+            if (name == null || name.length() == 0) {
+                return "";
+            }
+            ret += "|" + name;
         }
         if (ret.equals("")) {
             return ret;
@@ -161,7 +175,8 @@ public class ResFlagsAttr extends ResAttr {
 
         public String getValue() throws AndrolibException {
             if (value == null) {
-                value = ref.getReferent().getName();
+                ResResSpec referent = ref.getReferent();
+                value = referent == null ? "" : referent.getName();
             }
             return value;
         }

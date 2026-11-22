@@ -96,7 +96,36 @@ public class ResTable {
         // return getPackage(resID.package_).getResSpec(resID);
         ResPackage pkg = getPackage(resID.package_);
         if (pkg != null) {
-            return pkg.getResSpec(resID);
+            try {
+                return pkg.getResSpec(resID);
+            } catch (UndefinedResObject ignored) {
+                // A protected table can retain the original 0x7f IDs in XML while
+                // using a different package ID in resources.arsc. Try the stable
+                // type/entry portion before callers fall back to a raw literal.
+            }
+        }
+
+        // Never alias framework IDs: an application resource with the same low
+        // bits must not shadow android.R. For an application ID, accept only a
+        // unique match among the main packages so decoy package chunks cannot
+        // produce a guessed resource name.
+        if (resID.package_ != 1) {
+            int lowId = resID.id & 0x00ffffff;
+            ResResSpec match = null;
+            for (ResPackage mainPackage : mMainPackages) {
+                for (ResResSpec candidate : mainPackage.listResSpecs()) {
+                    if ((candidate.getId().id & 0x00ffffff) != lowId) {
+                        continue;
+                    }
+                    if (match != null && match != candidate) {
+                        return null;
+                    }
+                    match = candidate;
+                }
+            }
+            if (match != null) {
+                return match;
+            }
         }
 
         return null;

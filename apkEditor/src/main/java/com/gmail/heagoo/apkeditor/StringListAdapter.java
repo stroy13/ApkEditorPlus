@@ -1,6 +1,7 @@
 package com.gmail.heagoo.apkeditor;
 
 import android.app.Activity;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -80,10 +81,17 @@ class StringListAdapter extends BaseAdapter implements AdapterView.OnItemClickLi
         synchronized (this.valueList) {
             this.curConfig = curConfig;
             this.valueList.clear();
-            for (StringItem item : list) {
-                this.valueList.add(item);
+            if (list != null) {
+                for (StringItem item : list) {
+                    if (item != null) {
+                        this.valueList.add(item);
+                    }
+                }
             }
         }
+        Log.i("StringTab", "StringListAdapter.updateData config=" + curConfig
+                + ", incoming=" + (list == null ? 0 : list.size())
+                + ", stored=" + getCount());
         notifyDataSetChanged();
     }
 

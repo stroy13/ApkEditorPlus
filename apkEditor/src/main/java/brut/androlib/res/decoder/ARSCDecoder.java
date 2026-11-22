@@ -121,6 +121,7 @@ public class ARSCDecoder {
                     arscStream, resTable, idProvider, findFlagsOffsets, keepBroken, apkProtected);
             //TimeDumper timer = new TimeDumper(true);
             ResPackage[] pkgs = decoder.readTableHeader();
+            logPackageSummary(pkgs, apkProtected, keepBroken);
             //timer.lastTime("Decode Time");
             return new ARSCData(pkgs, decoder.mFlagsOffsets == null
                     ? null
@@ -156,6 +157,56 @@ public class ARSCDecoder {
             return trimmed;
         }
         return packages;
+    }
+
+    private static boolean isStringResourceSpec(ResResSpec spec) {
+        if (spec == null || spec.getType() == null) {
+            return false;
+        }
+        if ("string".equalsIgnoreCase(spec.getType().getName())) {
+            return true;
+        }
+        for (ResResource resource : spec.listResources()) {
+            if (resource != null && resource.getValue() instanceof ResStringValue) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void logPackageSummary(ResPackage[] packages, boolean protectedApk,
+                                          boolean keepBroken) {
+        if (packages == null) {
+            Log.i("ARSCDecoder", "decoded packages=null; protected=" + protectedApk
+                    + "; keepBroken=" + keepBroken);
+            return;
+        }
+        StringBuilder result = new StringBuilder("decoded packages=")
+                .append(packages.length).append("; protected=")
+                .append(protectedApk).append("; keepBroken=").append(keepBroken);
+        for (ResPackage pkg : packages) {
+            int stringSpecs = 0;
+            int stringResources = 0;
+            if (pkg != null) {
+                for (ResResSpec spec : pkg.listResSpecs()) {
+                    if (isStringResourceSpec(spec)) {
+                        stringSpecs++;
+                        if (spec.getAllResources() != null) {
+                            stringResources += spec.getAllResources().size();
+                        }
+                    }
+                }
+                result.append(" [id=0x").append(Integer.toHexString(pkg.getId()))
+                        .append(", name=").append(pkg.getName())
+                        .append(", specs=").append(pkg.getResSpecCount())
+                        .append(", stringSpecs=").append(stringSpecs)
+                        .append(", stringResources=").append(stringResources)
+                        .append(", configs=").append(pkg.getConfigs().size()).append(']');
+            } else {
+                result.append(" [null]");
+            }
+        }
+        Log.i("ARSCDecoder", result.toString());
     }
 
     private void dumpStrings(StringBlock strBlock) {

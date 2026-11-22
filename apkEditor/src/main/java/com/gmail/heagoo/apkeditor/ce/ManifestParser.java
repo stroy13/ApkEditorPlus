@@ -251,6 +251,16 @@ public class ManifestParser implements IAttributeCallback {
                 return "name";
             case 0x01010018:
                 return "authorities";
+            // These attributes are normally present in the string pool, but aapt
+            // is allowed to omit their names and refer to the framework resource
+            // map instead. Keep both forms equivalent so the effective manifest
+            // gets the real SDK values rather than the signing fallback.
+            case 0x0101020c:
+                return "minSdkVersion";
+            case 0x01010270:
+                return "targetSdkVersion";
+            case 0x01010271:
+                return "maxSdkVersion";
             case 0x0101021c:
                 return "versionName";
             case 0x0101021b:
@@ -310,7 +320,7 @@ public class ManifestParser implements IAttributeCallback {
                             int attrValIdx, int type, int attrValIdx2) {
         String attrName = strChunk.getStringByIndex(attrNameIdx);
         if (attrName == null || attrName.equals("")) {
-            if (attrNameIdx < attrIdChunk.getCount()) {
+            if (attrNameIdx >= 0 && attrNameIdx < attrIdChunk.getCount()) {
                 attrName = getNameFromAttr(attrIdChunk.attrIdArray[attrNameIdx]);
                 //Log.d("DEBUG", "getNameFromAttr return " + attrName);
             }
