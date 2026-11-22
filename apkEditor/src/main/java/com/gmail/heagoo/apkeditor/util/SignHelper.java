@@ -167,12 +167,11 @@ public final class SignHelper {
             validateOutputWithAndroid(ctx, new File(targetApkPath), out);
         } catch (Exception e) {
             if (out != null) {
-                out.log("Output rejected by Android package parser; removing unusable APK: " + e);
+                out.log("Android package parser rejected the generated APK; preserving signed output for diagnosis: " + e);
             }
-            // The pipeline publishes atomically before this final framework check.
-            // Do not leave an APK that the installer cannot parse.
-            //noinspection ResultOfMethodCallIgnored
-            new File(targetApkPath).delete();
+            // Keep the signed artifact so the user can inspect it or attempt installation.
+            // ZIP integrity and apksig verification have already passed; this independent
+            // framework parser check is inconclusive when it returns null without a cause.
             throw e;
         }
     }
@@ -187,7 +186,15 @@ public final class SignHelper {
         PackageManager pm = ctx.getPackageManager();
         PackageInfo info = pm.getPackageArchiveInfo(apk.getAbsolutePath(), PackageManager.GET_META_DATA);
         if (info == null || info.applicationInfo == null || info.packageName == null) {
-            throw new IOException("Android package parser cannot read generated APK: " + apk);
+            ManifestInfo manifest = readManifest(apk);
+            String splitDiagnostic = splitArchiveDiagnostic(manifest);
+            if (splitDiagnostic != null) throw new IOException(splitDiagnostic + ": " + apk);
+            String details = ManifestParser.describe(manifest);
+            if (out != null) {
+                out.log("Android package parser rejected generated APK; parsed output manifest: " + details);
+            }
+            throw new IOException("Android package parser cannot read generated APK; manifest="
+                    + details + "; signature and ZIP structure passed, but Android installability is unverified: " + apk);
         }
         if (out != null) {
             long versionCode = android.os.Build.VERSION.SDK_INT >= 28
@@ -218,6 +225,17 @@ public final class SignHelper {
                 }
             }
         }
+    }
+
+    static String splitArchiveDiagnostic(ManifestInfo manifest) {
+        if (manifest != null && manifest.isSplitRequired
+                && (manifest.splitTypes == null || manifest.splitTypes.isEmpty())) {
+            return "This is a split APK base requiring additional APK splits"
+                    + (manifest.requiredSplitTypes == null || manifest.requiredSplitTypes.isEmpty()
+                    ? "" : " (required: " + manifest.requiredSplitTypes + ")")
+                    + "; build from a universal APK or provide the complete split set";
+        }
+        return null;
     }
 
     private static ManifestInfo readManifest(File apk) throws Exception {

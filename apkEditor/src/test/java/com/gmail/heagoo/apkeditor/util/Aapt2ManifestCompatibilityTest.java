@@ -20,6 +20,48 @@ public class Aapt2ManifestCompatibilityTest {
         assertFalse(Aapt2Pipeline.safeRetryWarnings("x: warning: unexpected element <bad> found in <manifest>."));
         assertTrue(Aapt2Pipeline.safeRetryWarnings("x: warning: unexpected element <queries> found in <manifest>."));
     }
+    @Test public void convertsSplitRequiredBaseManifestToStandaloneButKeepsRealSplitMetadata() {
+        String base = "<manifest android:isSplitRequired=\"true\" android:requiredSplitTypes=\"base__abi,base__density\"/>";
+        String standalone = Aapt2Pipeline.removeBaseSplitRequirementAttributes(base);
+        assertFalse(standalone.contains("isSplitRequired"));
+        assertFalse(standalone.contains("requiredSplitTypes"));
+        String actualSplit = "<manifest android:isSplitRequired=\"true\" android:splitTypes=\"base__abi\"/>";
+        assertEquals(actualSplit, Aapt2Pipeline.removeBaseSplitRequirementAttributes(actualSplit));
+        String booleanEncodedAsNumber = "<manifest android:isSplitRequired=\"1\"/>";
+        assertEquals("<manifest/>", Aapt2Pipeline.removeBaseSplitRequirementAttributes(booleanEncodedAsNumber));
+        String emptySplitType = "<manifest android:isSplitRequired=\"true\" android:splitTypes=\"\" "
+                + "android:requiredSplitTypes=\"base__abi\"/>";
+        assertEquals("<manifest/>", Aapt2Pipeline.removeBaseSplitRequirementAttributes(emptySplitType));
+    }
+
+    @Test public void removesAllEmptyAndroidAttributesAndPreservesNonEmptyValues() {
+        String source = "<manifest package=\"x\" android:versionCode=\"  \" android:required=\"\" "
+                + "android:label=\"app\" custom:value=\"\"/>";
+        String fixed = Aapt2Pipeline.removeEmptyAndroidAttributes(source);
+        assertFalse(fixed.contains("android:versionCode"));
+        assertFalse(fixed.contains("android:required"));
+        assertTrue(fixed.contains("android:label=\"app\""));
+        assertTrue(fixed.contains("custom:value=\"\""));
+    }
+
+    @Test public void dropsUsesFeatureWithoutRequiredIdentityAndKeepsValidFeatures() {
+        String source = "<manifest><uses-feature android:glEsVersion=\"\" android:required=\"true\"/>"
+                + "<uses-feature android:name=\"camera\" android:required=\"true\"/>"
+                + "<uses-feature android:required=\"true\"></uses-feature></manifest>";
+        String fixed = Aapt2Pipeline.removeInvalidUsesFeatureElements(
+                Aapt2Pipeline.removeEmptyAndroidAttributes(source));
+        assertEquals("<manifest><uses-feature android:name=\"camera\" android:required=\"true\"/></manifest>", fixed);
+    }
+
+    @Test public void repairsKnownSyntheticFrameworkAttributeNamesWithoutTouchingUnknownIds() {
+        String source = "<manifest android:attr_0x0101000b=\"owner\" "
+                + "android:attr_0x0101021b=\"42\" android:attr_0x01019999=\"keep\"/>";
+        String repaired = Aapt2Pipeline.repairSyntheticFrameworkAttributeNames(source);
+        assertTrue(repaired, repaired.contains("android:sharedUserId=\"owner\""));
+        assertTrue(repaired, repaired.contains("android:versionCode=\"42\""));
+        assertTrue(repaired, repaired.contains("android:attr_0x01019999=\"keep\""));
+    }
+
     @Test public void retryKeepsNewElementsInCompiledManifest() throws Exception {
         String sdk=System.getenv("ANDROID_SDK_ROOT"); if (sdk==null) sdk=System.getenv("ANDROID_HOME");
         if (System.getenv("CI")!=null) assertNotNull(sdk); Assume.assumeNotNull(sdk);

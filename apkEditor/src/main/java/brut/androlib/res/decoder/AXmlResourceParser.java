@@ -351,8 +351,11 @@ public class AXmlResourceParser implements XmlResourceParser {
         if (value == null || value.length() == 0) {
             // Attr name is like 0x7fxxxxxx, revise the namespace
             int name = m_attributes[offset + ATTRIBUTE_IX_NAME];
-            if (m_resourceIDs != null && name >= 0 && name < m_resourceIDs.length
-                    && (m_resourceIDs[name] & 0x7f000000) == 0x7f000000) {
+            int resourceId = m_resourceIDs != null && name >= 0 && name < m_resourceIDs.length
+                    ? m_resourceIDs[name] : 0;
+            if (AndroidManifestAttributeNames.isFrameworkAttribute(resourceId)) {
+                value = android_ns;
+            } else if ((resourceId & 0x7f000000) == 0x7f000000) {
                 String appNamespace = getPossibleNamespace();
                 if (appNamespace != null) {
                     value = appNamespace;
@@ -414,6 +417,11 @@ public class AXmlResourceParser implements XmlResourceParser {
                 int resId = getAttributeNameResource(index);
                 if (resId != 0) {
                     String value = mAttrDecoder.decodeManifestAttr(resId);
+                    if (value == null && AndroidManifestAttributeNames.isFrameworkAttribute(resId)) {
+                        String pooledName = m_strings.getString(name);
+                        if (AndroidManifestAttributeNames.isValidAttributeName(pooledName)) value = pooledName;
+                    }
+                    if (value == null) value = AndroidManifestAttributeNames.nameFor(resId);
                     if (value != null) {
                         return value;
                     }
@@ -434,6 +442,11 @@ public class AXmlResourceParser implements XmlResourceParser {
                 value = mAttrDecoder.decodeManifestAttr(resId);
             } catch (AndrolibException e) {
             }
+            if (value == null && AndroidManifestAttributeNames.isFrameworkAttribute(resId)) {
+                String pooledName = m_strings.getString(name);
+                if (AndroidManifestAttributeNames.isValidAttributeName(pooledName)) value = pooledName;
+            }
+            if (value == null) value = AndroidManifestAttributeNames.nameFor(resId);
             if (value == null) {
                 // The framework resource table could not be loaded, so the attribute
                 // name is unknown. Returning null used to crash the XML serializer
