@@ -407,6 +407,13 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
     }
 
     private boolean needRebuildResource() throws IOException {
+        File manifest = new File(this.decodedFilePath + "/AndroidManifest.xml");
+        File res = new File(this.decodedFilePath + "/res");
+        // An existing resource.apk may have been produced by an older parser and
+        // still contain decimal/@0x references. Normalize before the cache check so
+        // a saved decoded project cannot silently reuse that stale binary manifest.
+        boolean normalized = ManifestResourceReferenceNormalizer.normalize(
+                manifest, res, this.buildTrace == null ? null : this.buildTrace.logger());
         File apkFile = new File(this.resourceApkPath);
         if (!apkFile.isFile() || !apkFile.exists()) {
             return true;
@@ -421,8 +428,8 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
             return true;
         }
         long apkTime = apkFile.lastModified();
-        return ModifiedTree.atLeast(new File(this.decodedFilePath + "/AndroidManifest.xml"), apkTime)
-                || ModifiedTree.atLeast(new File(this.decodedFilePath + "/res"), apkTime);
+        return normalized || ModifiedTree.atLeast(manifest, apkTime)
+                || ModifiedTree.atLeast(res, apkTime);
     }
 
     private boolean signApk() {

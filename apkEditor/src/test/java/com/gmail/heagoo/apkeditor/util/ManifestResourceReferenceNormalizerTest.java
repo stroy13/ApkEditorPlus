@@ -33,7 +33,8 @@ public class ManifestResourceReferenceNormalizerTest {
         File manifest = folder.newFile("AndroidManifest.xml");
         Files.write(manifest.toPath(), (
                 "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">"
-                        + "<application android:icon=\"@0x7f100000\" android:theme=\"@0x7f1501d5\" "
+                        + "<application android:icon=\"@0x7f100000\" "
+                        + "android:roundIcon=\"@2131755008\" android:theme=\"@0x7f1501d5\" "
                         + "android:enableOnBackInvokedCallback=\"@0x7f050005\" "
                         + "android:dataExtractionRules=\"@0x7f170008\"/></manifest>")
                 .getBytes(StandardCharsets.UTF_8));
@@ -41,6 +42,7 @@ public class ManifestResourceReferenceNormalizerTest {
         assertTrue(ManifestResourceReferenceNormalizer.normalize(manifest, res, null));
         String normalized = new String(Files.readAllBytes(manifest.toPath()), StandardCharsets.UTF_8);
         assertTrue(normalized.contains("android:icon=\"@drawable/noname_0x7f100000\""));
+        assertTrue(normalized.contains("android:roundIcon=\"@drawable/noname_0x7f100000\""));
         assertTrue(normalized.contains("android:theme=\"@style/noname_0x7f1501d5\""));
         assertTrue(normalized.contains("android:enableOnBackInvokedCallback=\"true\""));
         assertTrue(normalized.contains("android:dataExtractionRules=\"@xml/data_rules\""));

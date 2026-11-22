@@ -26,17 +26,19 @@ public final class ManifestResourceReferenceNormalizer {
     private static final Pattern ATTRIBUTE = Pattern.compile(
             "\\b([a-zA-Z][a-zA-Z0-9_]*)\\s*=\\s*\"([^\"]*)\"");
     private static final Pattern REFERENCE = Pattern.compile(
-            "([@?])0[xX]([0-9a-fA-F]{8})");
+            "([@?])(?:0[xX]([0-9a-fA-F]{1,8})(?![0-9a-fA-F])|([0-9]{1,10})(?![0-9]))");
     private static final Set<String> BOOLEAN_ATTRIBUTES = new HashSet<>();
 
     static {
         String[] names = {
-                "allowBackup", "autoRemoveFromRecents", "autoVerify", "directBootAware",
-                "enableOnBackInvokedCallback", "enabled", "exported", "extractNativeLibs",
-                "fullBackupOnly", "hasCode", "isolatedProcess", "largeHeap", "noHistory",
-                "persistent", "process", "restoreAnyVersion", "resizeableActivity",
-                "required", "stateNotNeeded", "stopWithTask", "supportsRtl",
-                "supportsPictureInPicture", "useAppZygote", "usesCleartextTraffic"
+                "allowBackup", "allowClearUserData", "autoRemoveFromRecents", "autoVerify",
+                "debuggable", "directBootAware", "enableOnBackInvokedCallback", "enabled",
+                "excludeFromRecents", "exported", "extractNativeLibs", "fullBackupOnly",
+                "grantUriPermissions", "hasCode", "isolatedProcess", "killAfterRestore",
+                "largeHeap", "noHistory", "persistent", "relinquishTaskIdentity",
+                "required", "restoreAnyVersion", "resizeableActivity", "stateNotNeeded",
+                "stopWithTask", "supportsMultipleDisplays", "supportsPictureInPicture",
+                "supportsRtl", "useAppZygote", "usesCleartextTraffic"
         };
         for (String name : names) BOOLEAN_ATTRIBUTES.add(name);
     }
@@ -70,7 +72,14 @@ public final class ManifestResourceReferenceNormalizer {
         while (matcher.find()) {
             int id;
             try {
-                id = (int) Long.parseLong(matcher.group(2), 16);
+                String hex = matcher.group(2);
+                String decimal = matcher.group(3);
+                long parsed = Long.parseLong(hex != null ? hex : decimal,
+                        hex != null ? 16 : 10);
+                if (parsed > 0xffffffffL) {
+                    throw new NumberFormatException("resource ID is too large");
+                }
+                id = (int) parsed;
             } catch (NumberFormatException ignored) {
                 matcher.appendReplacement(normalized, Matcher.quoteReplacement(matcher.group()));
                 unresolved++;
