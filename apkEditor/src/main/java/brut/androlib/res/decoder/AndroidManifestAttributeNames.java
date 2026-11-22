@@ -5,7 +5,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /** Small framework-attribute fallback for manifests decoded without android.jar. */
-final class AndroidManifestAttributeNames {
+public final class AndroidManifestAttributeNames {
     private static final Map<Integer, String> NAMES;
 
     static {
