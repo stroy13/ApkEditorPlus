@@ -348,6 +348,9 @@ public class ApkParseThread extends Thread {
                 }
                 progress(5);
                 this.resTable.getPackage(1);
+                Log.i("ApkParse", "Framework parser gate: "
+                        + this.resTable.getFrameworkLoadInfo() + "; "
+                        + getResourceDiagnostics());
                 if (this.cancelled) {
                     return z;
                 }
@@ -416,10 +419,16 @@ public class ApkParseThread extends Thread {
 
     private ResPackage loadMainPkg(ResTable resTable, ExtFile apkFile) throws AndrolibException {
         LOGGER.info("Loading resource table of apk file...");
-        ResPackage[] pkgs = getResPackagesFromApk(apkFile, resTable, sKeepBroken);
+        // Protected tables frequently carry qualifier bytes newer than this
+        // decoder knows. Keep those entries so a single invalid configuration does
+        // not remove every string resource from the project.
+        ResPackage[] pkgs = getResPackagesFromApk(apkFile, resTable,
+                sKeepBroken || this.mApkProtected);
         if (pkgs == null) {
+            Log.w("ApkParse", "Resource table returned no packages");
             return null;
         }
+        Log.i("ApkParse", describePackages(pkgs));
         switch (pkgs.length) {
             case 1:
                 this.apkPackage = pkgs[0];
@@ -483,8 +492,51 @@ public class ApkParseThread extends Thread {
             throw new AndrolibException("Arsc files with zero or multiple packages");
         }
         resTable.addPackage(this.apkPackage, true);
+        Log.i("ApkParse", "Selected resource package: "
+                + describePackage(this.apkPackage));
         LOGGER.info("Loaded.");
         return this.apkPackage;
+    }
+
+    private String describePackages(ResPackage[] packages) {
+        StringBuilder result = new StringBuilder("Resource table packages=")
+                .append(packages.length).append(" [");
+        for (int i = 0; i < packages.length; i++) {
+            if (i != 0) {
+                result.append(", ");
+            }
+            result.append(describePackage(packages[i]));
+        }
+        return result.append(']').toString();
+    }
+
+    private String describePackage(ResPackage pkg) {
+        if (pkg == null) {
+            return "null";
+        }
+        return "id=0x" + Integer.toHexString(pkg.getId())
+                + ", name=" + pkg.getName()
+                + ", specs=" + pkg.getResSpecCount()
+                + ", types=" + pkg.listTypes().size()
+                + ", stringSpecs=" + countStringSpecs(pkg)
+                + ", stringResources=" + countStringResources(pkg);
+    }
+
+    public String getResourceDiagnostics() {
+        return "protected=" + this.mApkProtected + "; "
+                + describePackage(this.apkPackage) + "; framework="
+                + (this.resTable == null ? "not initialized" : this.resTable.getFrameworkLoadInfo());
+    }
+
+    private int countStringSpecs(ResPackage pkg) {
+        int count = 0;
+        for (ResResSpec spec : pkg.listResSpecs()) {
+            if (spec != null && spec.getType() != null
+                    && "string".equalsIgnoreCase(spec.getType().getName())) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private int countStringResources(ResPackage pkg) {

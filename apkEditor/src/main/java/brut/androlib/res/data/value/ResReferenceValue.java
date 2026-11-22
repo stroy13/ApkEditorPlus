@@ -53,7 +53,11 @@ public class ResReferenceValue extends ResIntValue implements Serializable {
 
         ResResSpec spec = getReferent();
         if (spec == null) {
-            return "@null";
+            // The ID is still meaningful even when the matching package/table is
+            // unavailable. Decimal text is not valid resource syntax, while the
+            // hexadecimal literal lets aapt2 preserve the typed reference (and is
+            // much more useful than silently turning it into @null).
+            return (mTheme ? "?" : "@") + String.format("0x%08x", mValue);
         }
         boolean newId = spec.hasDefaultResource() && spec.getDefaultResource().getValue() instanceof ResIdValue;
 

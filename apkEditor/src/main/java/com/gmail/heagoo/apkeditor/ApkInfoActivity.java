@@ -2861,9 +2861,13 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
 
     @Override // com.gmail.heagoo.apkeditor.ApkParseConsumer
     public void resTableDecoded(boolean ret) {
+        Log.i("StringTab", "resTableDecoded ret=" + ret + "; "
+                + (this.parseThread == null ? "parseThread=null" : this.parseThread.getResourceDiagnostics()));
         if (ret) {
             try {
                 this.bStringPrepared = prepareStringList();
+                Log.i("StringTab", "resTableDecoded prepared=" + this.bStringPrepared
+                        + "; " + describeStringIndex());
             } catch (Throwable t) {
                 t.printStackTrace();
                 this.bStringPrepared = false;
@@ -2890,6 +2894,9 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
 
     @Override // com.gmail.heagoo.apkeditor.ApkParseConsumer
     public void resourceDecoded(final Map<String, String> fileEntry2ZipEntry) {
+        Log.i("StringTab", "resourceDecoded files="
+                + (fileEntry2ZipEntry == null ? 0 : fileEntry2ZipEntry.size()) + "; "
+                + (this.parseThread == null ? "parseThread=null" : this.parseThread.getResourceDiagnostics()));
         this.fileEntry2ZipEntry = fileEntry2ZipEntry;
         final boolean stringShowNeeded = !this.bStringPrepared;
         if (!this.bStringPrepared) {
@@ -2898,6 +2905,8 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             }
             try {
                 this.bStringPrepared = prepareStringList();
+                Log.i("StringTab", "resourceDecoded tablePrepared=" + this.bStringPrepared
+                        + "; " + describeStringIndex());
                 if (!this.bStringPrepared) {
                     // The resource table is the primary source, but a protected
                     // package can still expose its decoded values under a package
@@ -3045,16 +3054,36 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         updateCenterView();
     }
 
+    private String describeStringIndex() {
+        int configs = this.allStringValues == null ? 0 : this.allStringValues.size();
+        int values = 0;
+        if (this.allStringValues != null) {
+            for (ArrayList<StringItem> items : this.allStringValues.values()) {
+                if (items != null) {
+                    values += items.size();
+                }
+            }
+        }
+        return "configs=" + configs + ", values=" + values
+                + ", selected=" + this.curConfig;
+    }
+
     private boolean prepareStringList() {
         HashMap<String, ArrayList<StringItem>> valuesByConfig = new HashMap<>();
         this.allStringValues = valuesByConfig;
         if (this.parseThread == null) {
+            Log.w("StringTab", "prepareStringList: parseThread=null");
             return false;
         }
         ResPackage pkg = this.parseThread.getApkPackage();
         if (pkg == null) {
+            Log.w("StringTab", "prepareStringList: selected package=null; "
+                    + this.parseThread.getResourceDiagnostics());
             return false;
         }
+        Log.i("StringTab", "prepareStringList package=id=0x"
+                + Integer.toHexString(pkg.getId()) + ", name=" + pkg.getName()
+                + ", specs=" + pkg.getResSpecCount());
 
         // Read the resource table, rather than the generated XML files. This keeps
         // the editor usable for protected APKs whose values decoder has to skip a
@@ -3113,7 +3142,10 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                 stringValueList.add(new StringItem(name, value, styledValue));
             }
         }
-        return !valuesByConfig.isEmpty();
+        boolean prepared = !valuesByConfig.isEmpty();
+        Log.i("StringTab", "prepareStringList result=" + prepared + "; "
+                + describeStringIndex());
+        return prepared;
     }
 
     /**
@@ -3201,13 +3233,18 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             }
         }
         if (valuesByConfig.isEmpty()) {
+            Log.w("StringTab", "prepareStringListFromDecodedFiles: no values; root="
+                    + resRoot.getAbsolutePath());
             return false;
         }
         this.allStringValues = valuesByConfig;
+        Log.i("StringTab", "prepareStringListFromDecodedFiles result=true; "
+                + describeStringIndex());
         return true;
     }
 
     private void showStringList() {
+        Log.i("StringTab", "showStringList before spinner; " + describeStringIndex());
         if (this.allStringValues == null) {
             this.allStringValues = new HashMap<>();
         }
@@ -3223,6 +3260,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         Button searchBtn = (Button) findViewById(R.id.search_button);
         searchBtn.setOnClickListener(this);
         this.stringParsed = true;
+        Log.i("StringTab", "showStringList after spinner; " + describeStringIndex());
         updateCenterView();
     }
 
@@ -3947,6 +3985,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
 
     public void updateStringList() {
         if (this.allStringValues == null || this.allStringValues.isEmpty()) {
+            Log.w("StringTab", "updateStringList: empty index; " + describeStringIndex());
             this.curConfig = null;
             updateStringList(new ArrayList<StringItem>());
             return;
@@ -3956,6 +3995,8 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         }
         LOGGER.info("********BEST*********" + this.curConfig);
         ArrayList<StringItem> values = this.allStringValues.get(this.curConfig);
+        Log.i("StringTab", "updateStringList config=" + this.curConfig
+                + ", values=" + (values == null ? 0 : values.size()));
         updateStringList(values);
     }
 
