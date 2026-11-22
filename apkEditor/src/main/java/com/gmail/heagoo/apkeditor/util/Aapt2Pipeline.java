@@ -106,6 +106,13 @@ public final class Aapt2Pipeline {
             if (!out.isFile() || out.length() == 0) {
                 throw new IOException("AAPT2 produced no output");
             }
+            try {
+                ApkBuildPipeline.validateResourceArchive(out);
+                if (logger != null) logger.log("AAPT2 resource archive validated: " + out.length() + " bytes");
+            } catch (IOException invalid) {
+                if (out.exists()) out.delete();
+                throw new IOException("AAPT2 produced an invalid resource archive: " + invalid.getMessage(), invalid);
+            }
             if (flat.exists()) {
                 flat.delete();
             }

@@ -257,7 +257,11 @@ public final class ApkBuildPipeline {
         }
     }
 
-    /** Repack an unsigned full-edit output with the same storage/alignment rules. */
+    /**
+     * Repack an unsigned full-edit output with the same storage/alignment rules.
+     * This method deliberately keeps the existing file until the replacement has
+     * been written successfully.
+     */
     public static void normalizeUnsigned(File apk) throws IOException {
         File parent = apk.getAbsoluteFile().getParentFile();
         File temp = File.createTempFile("apkbuild-", ".unsigned", parent);
@@ -268,6 +272,81 @@ public final class ApkBuildPipeline {
             atomicReplace(temp, apk);
         } finally {
             deleteQuietly(temp);
+        }
+    }
+
+    /**
+     * Assemble the resource APK and decoded-file additions into an unsigned APK.
+     *
+     * <p>The legacy/native ZIP modifier has a void API and can leave a truncated
+     * target when the input resource archive is stale or malformed. Full compose
+     * uses this Java path so the output is written to a temporary file, checked for
+     * the two entries an Android resource package must contain, and only then
+     * published. Signing remains a separate step in {@link SignHelper}.
+     */
+    public static void mergeUnsigned(File source, File target,
+                                     Map<String, String> replacedFiles,
+                                     Map<String, String> addedFiles,
+                                     Set<String> deletedFiles,
+                                     int targetSdkVersion,
+                                     int extractNativeLibs,
+                                     Logger logger) throws IOException {
+        if (source == null || target == null) {
+            throw new IOException("Unsigned APK source/target is missing");
+        }
+        if (source.getCanonicalFile().equals(target.getCanonicalFile())) {
+            throw new IOException("Unsigned APK source and target must be different files");
+        }
+        validateResourceArchive(source);
+        File parent = target.getAbsoluteFile().getParentFile();
+        if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) {
+            throw new IOException("Cannot create output directory: " + parent);
+        }
+        File temp = File.createTempFile("apkbuild-", ".unsigned", parent);
+        try {
+            SigningOptions options = new SigningOptions(null, null, 1, targetSdkVersion,
+                    false, false, false, false, 6, extractNativeLibs);
+            merge(source, temp, replacedFiles, addedFiles, deletedFiles, options,
+                    null, null, logger);
+            validateResourceArchive(temp);
+            atomicReplace(temp, target);
+            log(logger, "Unsigned APK assembled and validated: " + target
+                    + " (" + target.length() + " bytes)");
+        } finally {
+            deleteQuietly(temp);
+        }
+    }
+
+    /** Validate the binary manifest and resource table inside an APK-like archive. */
+    public static void validateResourceArchive(File apk) throws IOException {
+        if (apk == null || !apk.isFile() || apk.length() == 0) {
+            throw new IOException("Resource APK is missing or empty: " + apk);
+        }
+        try (ZipFile zip = new ZipFile(apk)) {
+            ZipEntry manifest = zip.getEntry("AndroidManifest.xml");
+            if (manifest == null || manifest.isDirectory()) {
+                throw new IOException("Resource APK has no AndroidManifest.xml: " + apk);
+            }
+            validateManifest(readEntry(zip, manifest));
+            ZipEntry resources = zip.getEntry("resources.arsc");
+            if (resources == null || resources.isDirectory()) {
+                throw new IOException("Resource APK has no resources.arsc: " + apk);
+            }
+            validateResources(readEntry(zip, resources));
+        } catch (java.util.zip.ZipException e) {
+            throw new IOException("Resource APK is not a readable ZIP: " + apk, e);
+        }
+    }
+
+    private static byte[] readEntry(ZipFile zip, ZipEntry entry) throws IOException {
+        try (InputStream input = new BufferedInputStream(zip.getInputStream(entry), BUFFER_SIZE);
+             java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[BUFFER_SIZE];
+            int read;
+            while ((read = input.read(buffer)) > 0) {
+                output.write(buffer, 0, read);
+            }
+            return output.toByteArray();
         }
     }
 
