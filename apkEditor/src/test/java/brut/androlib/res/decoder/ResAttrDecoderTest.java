@@ -2,6 +2,12 @@ package brut.androlib.res.decoder;
 
 import android.util.TypedValue;
 
+import brut.androlib.res.data.ResID;
+import brut.androlib.res.data.ResPackage;
+import brut.androlib.res.data.ResResSpec;
+import brut.androlib.res.data.ResTable;
+import brut.androlib.res.data.ResTypeSpec;
+
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -39,5 +45,23 @@ public class ResAttrDecoderTest {
         assertEquals("@0x7f010005", decoder.decode(TypedValue.TYPE_STRING, 0,
                 "@2130771973", ENABLE_ON_BACK_INVOKED_CALLBACK,
                 "enableOnBackInvokedCallback"));
+    }
+
+    @Test
+    public void keepsGeneratedProtectedResourceNamesSymbolic() throws Exception {
+        ResTable table = new ResTable();
+        ResPackage pkg = new ResPackage(table, 0x7f, "com.example");
+        table.addPackage(pkg, true);
+        ResTypeSpec drawable = new ResTypeSpec("drawable", table, pkg, 0x10, 1);
+        pkg.addType(drawable);
+        int id = 0x7f100000;
+        ResResSpec spec = new ResResSpec(new ResID(id), null, pkg, drawable, true);
+        pkg.addResSpec(spec);
+        drawable.addResSpec(spec);
+
+        ResAttrDecoder decoder = new ResAttrDecoder();
+        decoder.setCurrentPackage(pkg);
+        assertEquals("@drawable/noname_0x7f100000",
+                decoder.decode(TypedValue.TYPE_REFERENCE, id, null, ICON, "icon"));
     }
 }

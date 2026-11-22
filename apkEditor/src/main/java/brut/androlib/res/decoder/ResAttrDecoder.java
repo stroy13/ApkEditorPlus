@@ -288,7 +288,12 @@ public class ResAttrDecoder {
         }
         try {
             ResResSpec spec = mCurrentPackage.getResTable().getResSpec(id);
-            if (spec != null && spec.getName() != null && !isGeneratedName(spec.getName())) {
+            if (spec != null && spec.getName() != null && !spec.getName().isEmpty()) {
+                // Protected tables commonly synthesize valid names such as
+                // noname_0x..., *_dup_0x..., or dummy_ae_.... They are the only
+                // symbols available for the decoded res/ tree and are preferable
+                // to a numeric @0x... literal, which aapt2 rejects for typed
+                // manifest references.
                 return (theme ? "?" : "@") + spec.getFullName(mCurrentPackage,
                         theme && "attr".equals(spec.getType().getName()));
             }
