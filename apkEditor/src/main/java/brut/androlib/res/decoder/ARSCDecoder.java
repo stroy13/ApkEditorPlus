@@ -16,7 +16,6 @@
 
 package brut.androlib.res.decoder;
 
-import android.util.Log;
 import android.util.TypedValue;
 
 import com.google.common.io.LittleEndianDataInputStream;
@@ -185,7 +184,7 @@ public class ARSCDecoder {
     private static void logPackageSummary(ResPackage[] packages, boolean protectedApk,
                                           boolean keepBroken) {
         if (packages == null) {
-            Log.i("ARSCDecoder", "decoded packages=null; protected=" + protectedApk
+            LOGGER.info("decoded packages=null; protected=" + protectedApk
                     + "; keepBroken=" + keepBroken);
             return;
         }
@@ -214,7 +213,7 @@ public class ARSCDecoder {
                 result.append(" [null]");
             }
         }
-        Log.i("ARSCDecoder", result.toString());
+        LOGGER.info(result.toString());
     }
 
     private void dumpStrings(StringBlock strBlock) {
@@ -693,7 +692,7 @@ public class ARSCDecoder {
             int data = (raw[offset + 11] & 0xff) << 24 | (raw[offset + 10] & 0xff) << 16
                     | (raw[offset + 9] & 0xff) << 8 | (raw[offset + 8] & 0xff);
             if (((raw[offset + 5] & 0xff) << 8 | (raw[offset + 4] & 0xff)) != 8) {
-                Log.d("DEBUG", "error");
+                LOGGER.fine("Resource bag value size is not 8 bytes");
             }
             resValue = readValue(type, data);
 
