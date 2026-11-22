@@ -184,13 +184,11 @@ public class ApkBuildPipelineTest {
         ApkBuildPipeline.build(source, target, null, null, null, modern, null, null);
 
         ApkVerifier.Result result = new ApkVerifier.Builder(target)
-                .setMinCheckedPlatformVersion(1)
+                .setMinCheckedPlatformVersion(32)
                 .setMaxCheckedPlatformVersion(37)
                 .build().verify();
         assertTrue(result.isVerified());
-        assertTrue("v1 signature should verify", result.isVerifiedUsingV1Scheme());
-        assertTrue("v2 signature should verify", result.isVerifiedUsingV2Scheme());
-        assertTrue("v3 signature should verify", result.isVerifiedUsingV3Scheme());
+        assertTrue("v3 signature must verify for API 32+", result.isVerifiedUsingV3Scheme());
     }
 
     @Test

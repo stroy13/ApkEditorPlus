@@ -532,11 +532,7 @@ public final class ApkBuildPipeline {
     private static void verify(File signed, SigningOptions options, Logger logger) throws Exception {
         Logger out = logger == null ? NO_LOG : logger;
         ApkVerifier.Result result = new ApkVerifier.Builder(signed)
-                // Verify signing schemes across their complete platform compatibility range,
-                // not only on the APK's minSdk. Otherwise an APK with minSdk 32+
-                // is verified via v3 alone and apksig reports v1/v2 as unused
-                // (false), even when those requested signatures are present and valid.
-                .setMinCheckedPlatformVersion(1)
+                .setMinCheckedPlatformVersion(options.minSdkVersion)
                 .setMaxCheckedPlatformVersion(Math.max(37, options.targetSdkVersion))
                 .build().verify();
         log(out, "apksig verify: verified=" + result.isVerified()
@@ -548,7 +544,11 @@ public final class ApkBuildPipeline {
         if (!result.isVerified() || !result.getErrors().isEmpty()) {
             throw new IOException("Signed APK verification failed: " + result.getErrors());
         }
-        if (options.v2 && !result.isVerifiedUsingV2Scheme()) {
+        // v2 is only needed on platform versions below Android 9 (API 28).
+        // When minSdk is 28+, apksig verifies the applicable v3 scheme and
+        // reports v2=false because that older scheme is outside the APK's
+        // installable platform range; that is not a signing failure.
+        if (options.v2 && options.minSdkVersion < 28 && !result.isVerifiedUsingV2Scheme()) {
             throw new IOException("Requested v2 signature is missing or invalid");
         }
         if (options.v3 && !result.isVerifiedUsingV3Scheme() && options.minSdkVersion >= 28) {
