@@ -69,7 +69,11 @@ public final class Aapt2Pipeline {
             String manifestBeforeRepair = new String(Files.readAllBytes(new File(linkManifest).toPath()),
                     java.nio.charset.StandardCharsets.UTF_8);
             String manifestAfterRepair = repairSyntheticFrameworkAttributeNames(manifestBeforeRepair);
+            String beforeSplitRepair = manifestAfterRepair;
             manifestAfterRepair = removeBaseSplitRequirementAttributes(manifestAfterRepair);
+            if (!beforeSplitRepair.equals(manifestAfterRepair) && logger != null) {
+                logger.log("AAPT2 manifest: removed split-only requirements from standalone base APK");
+            }
             manifestAfterRepair = removeEmptyAndroidAttributes(manifestAfterRepair);
             manifestAfterRepair = removeInvalidUsesFeatureElements(manifestAfterRepair);
             if (!manifestBeforeRepair.equals(manifestAfterRepair)) {
@@ -159,17 +163,16 @@ public final class Aapt2Pipeline {
     private static final Pattern EMPTY_ANDROID_ATTRIBUTE = Pattern.compile(
             "\\s+android:[A-Za-z_][A-Za-z0-9_.-]*\\s*=\\s*(['\\\"])(?:\\s*)\\1");
 
-    private static final Pattern SPLIT_REQUIRED_TRUE = Pattern.compile(
-            "\\bandroid:isSplitRequired\\s*=\\s*(['\\\"])true\\1");
+    private static final Pattern SPLIT_REQUIRED_ATTRIBUTE = Pattern.compile(
+            "\\s+android:isSplitRequired\\s*=\\s*(['\\\"])[^'\\\"]*\\1");
     private static final Pattern SPLIT_TYPES_ATTRIBUTE = Pattern.compile(
             "\\s+android:splitTypes\\s*=\\s*(['\\\"])[^'\\\"]*\\1");
     private static final Pattern REQUIRED_SPLIT_TYPES_ATTRIBUTE = Pattern.compile(
             "\\s+android:requiredSplitTypes\\s*=\\s*(['\\\"])[^'\\\"]*\\1");
 
     static String removeBaseSplitRequirementAttributes(String manifestXml) {
-        if (!SPLIT_REQUIRED_TRUE.matcher(manifestXml).find()
-                || SPLIT_TYPES_ATTRIBUTE.matcher(manifestXml).find()) return manifestXml;
-        String result = SPLIT_REQUIRED_TRUE.matcher(manifestXml).replaceAll("");
+        if (SPLIT_TYPES_ATTRIBUTE.matcher(manifestXml).find()) return manifestXml;
+        String result = SPLIT_REQUIRED_ATTRIBUTE.matcher(manifestXml).replaceAll("");
         result = REQUIRED_SPLIT_TYPES_ATTRIBUTE.matcher(result).replaceAll("");
         return result;
     }

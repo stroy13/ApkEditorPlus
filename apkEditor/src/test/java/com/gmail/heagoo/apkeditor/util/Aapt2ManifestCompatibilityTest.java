@@ -27,6 +27,8 @@ public class Aapt2ManifestCompatibilityTest {
         assertFalse(standalone.contains("requiredSplitTypes"));
         String actualSplit = "<manifest android:isSplitRequired=\"true\" android:splitTypes=\"base__abi\"/>";
         assertEquals(actualSplit, Aapt2Pipeline.removeBaseSplitRequirementAttributes(actualSplit));
+        String booleanEncodedAsNumber = "<manifest android:isSplitRequired=\"1\"/>";
+        assertEquals("<manifest/>", Aapt2Pipeline.removeBaseSplitRequirementAttributes(booleanEncodedAsNumber));
     }
 
     @Test public void removesAllEmptyAndroidAttributesAndPreservesNonEmptyValues() {
