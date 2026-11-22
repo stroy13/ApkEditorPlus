@@ -20,6 +20,15 @@ public class Aapt2ManifestCompatibilityTest {
         assertFalse(Aapt2Pipeline.safeRetryWarnings("x: warning: unexpected element <bad> found in <manifest>."));
         assertTrue(Aapt2Pipeline.safeRetryWarnings("x: warning: unexpected element <queries> found in <manifest>."));
     }
+    @Test public void repairsKnownSyntheticFrameworkAttributeNamesWithoutTouchingUnknownIds() {
+        String source = "<manifest android:attr_0x0101000b=\"owner\" "
+                + "android:attr_0x0101021b=\"42\" android:attr_0x01019999=\"keep\"/>";
+        String repaired = Aapt2Pipeline.repairSyntheticFrameworkAttributeNames(source);
+        assertTrue(repaired, repaired.contains("android:sharedUserId=\"owner\""));
+        assertTrue(repaired, repaired.contains("android:versionCode=\"42\""));
+        assertTrue(repaired, repaired.contains("android:attr_0x01019999=\"keep\""));
+    }
+
     @Test public void retryKeepsNewElementsInCompiledManifest() throws Exception {
         String sdk=System.getenv("ANDROID_SDK_ROOT"); if (sdk==null) sdk=System.getenv("ANDROID_HOME");
         if (System.getenv("CI")!=null) assertNotNull(sdk); Assume.assumeNotNull(sdk);

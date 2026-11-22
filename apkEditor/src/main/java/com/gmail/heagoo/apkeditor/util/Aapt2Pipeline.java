@@ -10,6 +10,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import brut.androlib.res.decoder.AndroidManifestAttributeNames;
 
 /* loaded from: /tmp/apkx/classes9.dex */
 public final class Aapt2Pipeline {
@@ -61,6 +65,18 @@ public final class Aapt2Pipeline {
                     if (logger != null) logger.log("AAPT2 temporary synthetic drawable aliases: " + aliases.size());
                 }
                 compileDir = staged.toString();
+            }
+            String manifestBeforeRepair = new String(Files.readAllBytes(new File(linkManifest).toPath()),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            String manifestAfterRepair = repairSyntheticFrameworkAttributeNames(manifestBeforeRepair);
+            if (!manifestBeforeRepair.equals(manifestAfterRepair)) {
+                if (stagedManifest == null) {
+                    stagedManifest = Files.createTempFile(out.getAbsoluteFile().getParentFile().toPath(),
+                            "aapt2-manifest-", ".xml");
+                }
+                Files.write(stagedManifest, manifestAfterRepair.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                linkManifest = stagedManifest.toString();
+                if (logger != null) logger.log("AAPT2 manifest: restored synthetic Android attribute names");
             }
             if (logger != null) logger.log("AAPT2 resource scan and staging: " + elapsed(repairStart) + " ms; repaired files=" + repairs.size());
             try {
@@ -133,6 +149,22 @@ public final class Aapt2Pipeline {
             if (output.exists()) output.delete();
             throw new IOException("AAPT2 manifest validation reported additional problems: " + warnings, failure);
         }
+    }
+
+    private static final Pattern SYNTHETIC_FRAMEWORK_ATTRIBUTE = Pattern.compile(
+            "android:attr_0x([0-9a-fA-F]{8})");
+
+    static String repairSyntheticFrameworkAttributeNames(String manifestXml) {
+        Matcher matcher = SYNTHETIC_FRAMEWORK_ATTRIBUTE.matcher(manifestXml);
+        StringBuffer repaired = new StringBuffer(manifestXml.length());
+        while (matcher.find()) {
+            String name = AndroidManifestAttributeNames.nameFor(
+                    (int) Long.parseLong(matcher.group(1), 16));
+            if (name == null) continue;
+            matcher.appendReplacement(repaired, Matcher.quoteReplacement("android:" + name));
+        }
+        matcher.appendTail(repaired);
+        return repaired.toString();
     }
 
     private static long elapsed(long started) {
