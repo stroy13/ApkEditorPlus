@@ -2869,6 +2869,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                 this.bStringPrepared = prepareStringList();
                 Log.i("StringTab", "resTableDecoded prepared=" + this.bStringPrepared
                         + "; " + describeStringIndex());
+                persistStringIndexDiagnostics("resTableDecoded");
             } catch (Throwable t) {
                 t.printStackTrace();
                 this.bStringPrepared = false;
@@ -2918,6 +2919,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                     Log.i("StringTab", "resourceDecoded fileFallback=" + this.bStringPrepared
                             + "; " + describeStringIndex());
                 }
+                persistStringIndexDiagnostics("resourceDecoded");
             } catch (Throwable t) {
                 // A single broken string entry must not kill the whole decode.
                 t.printStackTrace();
@@ -3055,6 +3057,26 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         this.loadCopyButton.setText(R.string.lab_load_copy);
         this.loadCopyButton.setVisibility(0);
         updateCenterView();
+    }
+
+    private void persistStringIndexDiagnostics(String stage) {
+        if (this.decodeRootPath == null) {
+            return;
+        }
+        File report = new File(this.decodeRootPath, ".string-tab-diagnostics.txt");
+        try {
+            OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(report),
+                    StandardCharsets.UTF_8.name());
+            writer.write(stage);
+            writer.write("\n");
+            writer.write(this.parseThread == null ? "parseThread=null" : this.parseThread.getResourceDiagnostics());
+            writer.write("\n");
+            writer.write(describeStringIndex());
+            writer.write("\n");
+            writer.close();
+        } catch (Exception ignored) {
+            // Diagnostics must never affect resource decoding or the UI.
+        }
     }
 
     private String describeStringIndex() {
@@ -3281,6 +3303,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         searchBtn.setOnClickListener(this);
         this.stringParsed = true;
         Log.i("StringTab", "showStringList after spinner; " + describeStringIndex());
+        persistStringIndexDiagnostics("showStringList");
         updateCenterView();
     }
 

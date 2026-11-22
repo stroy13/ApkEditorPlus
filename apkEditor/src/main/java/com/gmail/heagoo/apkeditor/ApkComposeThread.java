@@ -25,9 +25,12 @@ import com.gmail.heagoo.common.IOUtils;
 import com.gmail.heagoo.common.ITaskCallback;
 import com.gmail.heagoo.common.SDCard;
 import com.gmail.heagoo.common.TextFileReader;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
@@ -660,8 +663,35 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
         return true;
     }
 
+    private void logPersistedStringDiagnostics() {
+        if (this.buildTrace == null || this.buildTrace.logger() == null
+                || this.decodedFilePath == null) {
+            return;
+        }
+        File report = new File(this.decodedFilePath, ".string-tab-diagnostics.txt");
+        if (!report.isFile()) {
+            this.buildTrace.logger().log("String tab diagnostics: report missing: "
+                    + report.getAbsolutePath());
+            return;
+        }
+        StringBuilder text = new StringBuilder();
+        try {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(
+                    new FileInputStream(report), "UTF-8"));
+            String line;
+            while ((line = reader.readLine()) != null && text.length() < 8192) {
+                text.append(line).append('\n');
+            }
+            reader.close();
+            this.buildTrace.logger().log("String tab diagnostics:\n" + text.toString());
+        } catch (Exception e) {
+            this.buildTrace.logger().log("String tab diagnostics: read failed: " + e);
+        }
+    }
+
     private boolean composeResource() {
         this.tempApkPath = this.targetApkPath + ".in";
+        logPersistedStringDiagnostics();
         try {
             String selectedFramework = ToolFramework.selected(this.ctx, this.androidJarPath);
             String aaptChoice = PreferenceManager.getDefaultSharedPreferences(this.ctx).getString("AaptVersion", "legacy");
