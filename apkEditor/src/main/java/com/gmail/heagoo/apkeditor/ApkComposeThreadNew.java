@@ -48,6 +48,7 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
     private ITaskCallback.TaskStepInfo stepInfo;
     private boolean succeed;
     private String targetApkPath;
+    private String originalApkPath;
     private ITaskCallback taskCallback;
     private Map<String, String> builtDexFiles = new HashMap();
     private List<String> modifiedSmaliFolders = new ArrayList();
@@ -56,6 +57,10 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
     private ComposeBuildTrace buildTrace;
 
     public ApkComposeThreadNew(Context ctx, String decodedFilePath, String apkPath) {
+        this(ctx, decodedFilePath, apkPath, null);
+    }
+
+    public ApkComposeThreadNew(Context ctx, String decodedFilePath, String apkPath, String originalApkPath) {
         this.ctx = ctx;
         File fileDir = ctx.getFilesDir();
         String rootDirectory = fileDir.getAbsolutePath();
@@ -64,6 +69,7 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
         this.androidJarPath = this.binRootPath + "/android.jar";
         this.decodedFilePath = decodedFilePath;
         this.targetApkPath = apkPath;
+        this.originalApkPath = originalApkPath;
         this.resourceApkPath = decodedFilePath + "/build/resource.apk";
         LOGGER.info("aaptPath: " + this.aaptPath);
         LOGGER.info("androidJarPath: " + this.androidJarPath);
@@ -330,7 +336,8 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
 
     private void mergeApk() throws IOException {
         char c;
-        if (Aapt2ResourceTableFallback.restoreOriginalIfEmpty(this.resourceApkPath, this.targetApkPath)
+        if (this.originalApkPath != null
+                && Aapt2ResourceTableFallback.restoreOriginalIfEmpty(this.resourceApkPath, this.originalApkPath)
                 && this.buildTrace != null && this.buildTrace.logger() != null) {
             this.buildTrace.logger().log("AAPT2 emitted an empty resource table; preserved the original resources.arsc");
         }
