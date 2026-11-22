@@ -264,7 +264,7 @@ public class ResAttrDecoder {
             return null;
         }
         try {
-            ResResSpec spec = mCurrentPackage.getResTable().getResSpec(id);
+            ResResSpec spec = findReferenceSpec(id);
             if (spec == null || !spec.hasDefaultResource()) {
                 return null;
             }
@@ -282,12 +282,38 @@ public class ResAttrDecoder {
         return null;
     }
 
+    private ResResSpec findReferenceSpec(int id) throws AndrolibException {
+        if (mCurrentPackage == null) {
+            return null;
+        }
+        ResResSpec spec = mCurrentPackage.getResTable().getResSpec(id);
+        if (spec != null) {
+            return spec;
+        }
+        // Resource-protectors often rewrite the package byte while keeping the
+        // type/entry portion in the manifest. ResTable deliberately avoids an
+        // ambiguous cross-package guess; the selected manifest package is a safe
+        // scope for this fallback.
+        int lowId = id & 0x00ffffff;
+        ResResSpec match = null;
+        for (ResResSpec candidate : mCurrentPackage.listResSpecs()) {
+            if ((candidate.getId().id & 0x00ffffff) != lowId) {
+                continue;
+            }
+            if (match != null && match != candidate) {
+                return null;
+            }
+            match = candidate;
+        }
+        return match;
+    }
+
     private String formatReference(int id, boolean theme) throws AndrolibException {
         if (id == 0) {
             return "@null";
         }
         try {
-            ResResSpec spec = mCurrentPackage.getResTable().getResSpec(id);
+            ResResSpec spec = findReferenceSpec(id);
             if (spec != null && spec.getName() != null && !spec.getName().isEmpty()) {
                 // Protected tables commonly synthesize valid names such as
                 // noname_0x..., *_dup_0x..., or dummy_ae_.... They are the only
