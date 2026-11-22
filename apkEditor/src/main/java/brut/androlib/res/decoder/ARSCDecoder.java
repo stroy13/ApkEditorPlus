@@ -407,8 +407,12 @@ public class ARSCDecoder {
             mResId = (0xff000000 & mResId) | typeSpec.getId() << 16;
             mTypeSpec = typeSpec;
         }
-        if ((typeFlags & (TYPE_FLAG_SPARSE | TYPE_FLAG_OFFSET16)) != 0) {
-            // Keep the fact that the input used a compact type-entry index. This
+        if ((typeFlags & (TYPE_FLAG_SPARSE | TYPE_FLAG_OFFSET16))
+                == (TYPE_FLAG_SPARSE | TYPE_FLAG_OFFSET16)) {
+            throw new AndrolibException("Resource type cannot use sparse and offset16 indexes together");
+        }
+        if ((typeFlags & TYPE_FLAG_SPARSE) != 0) {
+            // Keep the fact that the input used a sparse type-entry index. This
             // is diagnostic state today, and also prevents later writers from
             // accidentally treating the table as an ordinary dense table.
             mResTable.setSparseResources(true);

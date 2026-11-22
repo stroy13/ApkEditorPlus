@@ -152,6 +152,17 @@ public class ApkStructureValidatorTest {
     }
 
     @Test
+    public void rejectsAmbiguousSparseAndOffset16Flags() {
+        try {
+            ApkStructureValidator.validateResources(arscWithTypeChunk(0x03,
+                    new int[]{1}, 8));
+            fail("Expected mutually exclusive type flags to be rejected");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage().contains("combine sparse and offset16"));
+        }
+    }
+
+    @Test
     public void rejectsTruncatedTable() {
         byte[] table = arsc(new String[]{"label"}, true);
         byte[] truncated = new byte[table.length - 4];

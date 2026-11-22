@@ -4,6 +4,7 @@ import brut.androlib.AndrolibException;
 import brut.androlib.res.data.ResID;
 import brut.androlib.res.data.ResPackage;
 import brut.androlib.res.data.ResResSpec;
+import brut.androlib.res.data.ResTable;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
@@ -14,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -53,8 +55,11 @@ public class ARSCDecoderSparseTest {
 
     @Test
     public void decodesACompleteSparseResourceTableWithNonContiguousIds() throws Exception {
+        ResTable table = new ResTable();
         ARSCDecoder.ARSCData decoded = ARSCDecoder.decode(
-                new ByteArrayInputStream(sparseResourceTable()), false, false);
+                new ByteArrayInputStream(sparseResourceTable()), false, false,
+                table, null, false);
+        assertTrue(table.getSparseResources());
         ResPackage pkg = decoded.getOnePackage();
 
         ResResSpec first = pkg.getResSpec(new ResID(0x7f010001));
@@ -95,6 +100,78 @@ public class ARSCDecoderSparseTest {
         putSimpleStringEntry(config, 0, 0);
         putSimpleStringEntry(config, 1, 1);
 
+        return wrapPackage(values, typeNames, keyNames, typeSpec, type);
+    }
+
+    @Test
+    public void decodesOffset16EntriesWithoutMarkingThemSparse() throws Exception {
+        ResTable table = new ResTable();
+        ARSCDecoder.ARSCData decoded = ARSCDecoder.decode(
+                new ByteArrayInputStream(singleEntryResourceTable(0x02, false)), false, false,
+                table, null, false);
+        assertFalse(table.getSparseResources());
+        assertEquals("value", decoded.getOnePackage()
+                .getResSpec(new ResID(0x7f010000)).getName());
+    }
+
+    @Test
+    public void decodesCompactSimpleEntries() throws Exception {
+        ARSCDecoder.ARSCData decoded = ARSCDecoder.decode(
+                new ByteArrayInputStream(singleEntryResourceTable(0, true)), false, false);
+        assertEquals("value", decoded.getOnePackage()
+                .getResSpec(new ResID(0x7f010000)).getName());
+    }
+
+    private static byte[] singleEntryResourceTable(int typeFlags, boolean compact) {
+        byte[] values = stringPool(new String[]{"Hello"});
+        byte[] typeNames = stringPool(new String[]{"string"});
+        byte[] keyNames = stringPool(new String[]{"value"});
+
+        byte[] typeSpec = new byte[20];
+        ByteBuffer spec = ByteBuffer.wrap(typeSpec).order(ByteOrder.LITTLE_ENDIAN);
+        spec.putShort((short) 0x0202);
+        spec.putShort((short) 16);
+        spec.putInt(typeSpec.length);
+        spec.put((byte) 1);
+        spec.put((byte) 0);
+        spec.putShort((short) 0);
+        spec.putInt(1);
+
+        int offsetWidth = (typeFlags & 0x02) != 0 ? 2 : 4;
+        int entriesStart = (48 + offsetWidth + 3) & ~3;
+        int entrySize = compact ? 8 : 16;
+        byte[] type = new byte[entriesStart + entrySize];
+        ByteBuffer config = ByteBuffer.wrap(type).order(ByteOrder.LITTLE_ENDIAN);
+        config.putShort((short) 0x0201);
+        config.putShort((short) 48);
+        config.putInt(type.length);
+        config.put((byte) 1);
+        config.put((byte) typeFlags);
+        config.putShort((short) 0);
+        config.putInt(1);
+        config.putInt(entriesStart);
+        config.putInt(28);
+        config.put(new byte[24]);
+        if (offsetWidth == 2) {
+            config.putShort((short) 0);
+        } else {
+            config.putInt(0);
+        }
+        while (config.position() < entriesStart) {
+            config.put((byte) 0);
+        }
+        if (compact) {
+            config.putShort((short) 0); // key index
+            config.putShort((short) ((0x03 << 8) | 0x0008)); // TYPE_STRING | FLAG_COMPACT
+            config.putInt(0); // global value string index
+        } else {
+            putSimpleStringEntry(config, 0, 0);
+        }
+        return wrapPackage(values, typeNames, keyNames, typeSpec, type);
+    }
+
+    private static byte[] wrapPackage(byte[] values, byte[] typeNames, byte[] keyNames,
+                                       byte[] typeSpec, byte[] type) {
         int packageSize = 288 + typeNames.length + keyNames.length
                 + typeSpec.length + type.length;
         byte[] pkg = new byte[packageSize];

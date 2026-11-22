@@ -203,6 +203,9 @@ public final class ApkStructureValidator {
             throw new IOException("ResTable_type has too many entries: " + entryCount);
         }
         int flags = b.get(pos + 9) & 0xff;
+        if ((flags & 0x03) == 0x03) {
+            throw new IOException("ResTable_type cannot combine sparse and offset16 flags at " + pos);
+        }
         long entriesStart = b.getInt(pos + 16) & 0xffffffffL;
         if (entriesStart < header || entriesStart > size) {
             throw new IOException("Invalid ResTable_type entriesStart at " + pos + ": "
