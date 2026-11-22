@@ -349,18 +349,25 @@ public class AXmlResourceParser implements XmlResourceParser {
 
         // Added by Pujiang
         if (value == null || value.length() == 0) {
-            // Attr name is like 0x7fxxxxxx, revise the namespace
+            // The namespace string can be damaged independently of the attribute
+            // name. Use the resource-map package id as a second source: 0x01 is
+            // always the Android framework, while 0x7f is this APK's package.
             int name = m_attributes[offset + ATTRIBUTE_IX_NAME];
-            if (m_resourceIDs != null && name >= 0 && name < m_resourceIDs.length
-                    && (m_resourceIDs[name] & 0x7f000000) == 0x7f000000) {
-                String appNamespace = getPossibleNamespace();
-                if (appNamespace != null) {
-                    value = appNamespace;
+            if (m_resourceIDs != null && name >= 0 && name < m_resourceIDs.length) {
+                int resourceId = m_resourceIDs[name];
+                int packageId = (resourceId >>> 24) & 0xff;
+                if (packageId == 1) {
+                    value = android_ns;
+                } else if (packageId == 0x7f) {
+                    String appNamespace = getPossibleNamespace();
+                    if (appNamespace != null) {
+                        value = appNamespace;
+                    }
                 }
             }
             // Original logical from apktool. Obfuscated manifests can contain
             // invalid string-pool indices, so do not dereference a missing name.
-            else {
+            if (value == null || value.length() == 0) {
                 String attributeName = m_strings.getString(name);
                 if (attributeName != null && attributeName.length() == 0) {
                     value = android_ns;
