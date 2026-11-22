@@ -431,58 +431,53 @@ public class ApkParseThread extends Thread {
             return null;
         }
         Log.i("ApkParse", describePackages(pkgs));
-        switch (pkgs.length) {
-            case 1:
-                this.apkPackage = pkgs[0];
+        // Do not trust package-array order. Protected/resource-virtualized APKs
+        // can contain decoy package chunks, and a one-package table can still be a
+        // stringless decoy. Prefer the manifest package only when it actually has
+        // string resources; otherwise choose the non-framework package with the
+        // strongest string-resource signal.
+        this.apkPackage = null;
+        ResPackage manifestCandidate = null;
+        for (ResPackage candidate : pkgs) {
+            if (candidate != null && !isFrameworkPackage(candidate)
+                    && this.manifestPackageName != null
+                    && this.manifestPackageName.equals(candidate.getName())) {
+                manifestCandidate = candidate;
                 break;
-            case 2:
-                if (pkgs[0].getName().equals("android")) {
-                    LOGGER.warning("Skipping \"android\" package group");
-                    this.apkPackage = pkgs[1];
-                    break;
-                } else if (pkgs[0].getName().equals("com.htc")) {
-                    LOGGER.warning("Skipping \"htc\" package group");
-                    this.apkPackage = pkgs[1];
-                    break;
-                }
-                break;
+            }
         }
-        if (this.apkPackage == null && pkgs.length > 0) {
-            // Some protected APKs retain the standard ZIP filenames, so
-            // mApkProtected alone cannot identify them. Their resource table may
-            // contain many decoy package chunks; select the manifest package when
-            // possible, otherwise choose the package with the most resource specs.
-            // This is also a safe fallback for ordinary APKs with extra package chunks.
-            if (this.manifestPackageName != null) {
-                for (ResPackage candidate : pkgs) {
-                    if (candidate != null && this.manifestPackageName.equals(candidate.getName())) {
-                        this.apkPackage = candidate;
-                        break;
-                    }
+        if (manifestCandidate != null && countStringResources(manifestCandidate) > 0) {
+            this.apkPackage = manifestCandidate;
+        }
+        if (this.apkPackage == null) {
+            ResPackage bestCandidate = null;
+            int bestStringResources = -1;
+            int bestManifestMatch = -1;
+            int bestPrivatePackage = -1;
+            int bestSpecCount = -1;
+            for (ResPackage candidate : pkgs) {
+                if (candidate == null || isFrameworkPackage(candidate)) {
+                    continue;
+                }
+                int stringResources = countStringResources(candidate);
+                int manifestMatch = candidate == manifestCandidate ? 1 : 0;
+                int privatePackage = candidate.getId() == 0x7f ? 1 : 0;
+                int specCount = candidate.getResSpecCount();
+                if (bestCandidate == null || stringResources > bestStringResources
+                        || (stringResources == bestStringResources
+                        && (manifestMatch > bestManifestMatch
+                        || (manifestMatch == bestManifestMatch
+                        && (privatePackage > bestPrivatePackage
+                        || (privatePackage == bestPrivatePackage
+                        && specCount > bestSpecCount)))))) {
+                    bestCandidate = candidate;
+                    bestStringResources = stringResources;
+                    bestManifestMatch = manifestMatch;
+                    bestPrivatePackage = privatePackage;
+                    bestSpecCount = specCount;
                 }
             }
-            if (this.apkPackage == null) {
-                ResPackage bestCandidate = null;
-                int bestStringResources = -1;
-                int bestSpecCount = -1;
-                for (ResPackage candidate : pkgs) {
-                    if (candidate == null || "android".equals(candidate.getName())
-                            || "com.htc".equals(candidate.getName())) continue;
-                    int stringResources = countStringResources(candidate);
-                    int specCount = candidate.getResSpecCount();
-                    // Decoy package chunks can contain many non-string specs while the
-                    // real application package contains the values shown in the String
-                    // tab. Prefer the package with actual string entries, then retain
-                    // the old largest-package fallback for stringless APKs.
-                    if (bestCandidate == null || stringResources > bestStringResources
-                            || (stringResources == bestStringResources && specCount > bestSpecCount)) {
-                        bestCandidate = candidate;
-                        bestStringResources = stringResources;
-                        bestSpecCount = specCount;
-                    }
-                }
-                this.apkPackage = bestCandidate;
-            }
+            this.apkPackage = bestCandidate;
         }
         if (this.apkPackage == null && pkgs.length > 0) {
             // All candidates were framework-like. Keep the first package so the
@@ -498,6 +493,12 @@ public class ApkParseThread extends Thread {
                 + describePackage(this.apkPackage));
         LOGGER.info("Loaded.");
         return this.apkPackage;
+    }
+
+    private boolean isFrameworkPackage(ResPackage pkg) {
+        return pkg != null && (pkg.getId() == 1
+                || "android".equals(pkg.getName())
+                || "com.htc".equals(pkg.getName()));
     }
 
     private String describePackages(ResPackage[] packages) {

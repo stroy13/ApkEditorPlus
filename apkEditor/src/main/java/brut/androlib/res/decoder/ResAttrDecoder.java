@@ -86,6 +86,11 @@ public class ResAttrDecoder {
 
     public String decode(int type, int value, String rawValue, int attrResId)
             throws AndrolibException {
+        return decode(type, value, rawValue, attrResId, null);
+    }
+
+    public String decode(int type, int value, String rawValue, int attrResId,
+                        String attrName) throws AndrolibException {
         if (mCurrentPackage == null) {
             // No package available (nothing in the table matched): do not crash the
             // whole file decode, just pass the raw value through.
@@ -93,19 +98,26 @@ public class ResAttrDecoder {
         }
         ResScalarValue resValue = mCurrentPackage.getValueFactory().factory(
                 type, value, rawValue);
+        int namedAttrId = knownFrameworkAttrId(attrName);
+        int effectiveAttrId = attrResId;
+        if (namedAttrId != 0 && (attrResId == 0
+                || (((attrResId >>> 24) & 0xff) == 1
+                && !attrName.equals(knownFrameworkAttrName(attrResId))))) {
+            effectiveAttrId = namedAttrId;
+        }
 
         // The binary value type/data pair is authoritative for typed manifest
         // values. In particular, a protected APK can leave a decimal resource ID
         // in the raw string slot even though the value is a reference or a flag.
-        String known = decodeKnownValue(type, value, rawValue, attrResId, resValue);
+        String known = decodeKnownValue(type, value, rawValue, effectiveAttrId, resValue);
         if (known != null) {
             return known;
         }
 
         String decoded = null;
-        if (attrResId > 0) {
+        if (effectiveAttrId > 0) {
             try {
-                ResResSpec spec = mCurrentPackage.getResTable().getResSpec(attrResId);
+                ResResSpec spec = mCurrentPackage.getResTable().getResSpec(effectiveAttrId);
                 if (spec != null && spec.getDefaultResource() != null
                         && spec.getDefaultResource().getValue() instanceof ResAttr) {
                     decoded = ((ResAttr) spec.getDefaultResource().getValue())
@@ -454,6 +466,63 @@ public class ResAttrDecoder {
     private static boolean isGeneratedName(String name) {
         return name.startsWith("noname_") || name.indexOf("_dup_") >= 0
                 || name.startsWith("dummy_ae_") || name.startsWith("attr_0x");
+    }
+
+    private static int knownFrameworkAttrId(String name) {
+        if (name == null) {
+            return 0;
+        }
+        if ("theme".equals(name)) return ANDROID_ATTR_THEME;
+        if ("label".equals(name)) return ANDROID_ATTR_LABEL;
+        if ("icon".equals(name)) return ANDROID_ATTR_ICON;
+        if ("name".equals(name)) return ANDROID_ATTR_NAME;
+        if ("permission".equals(name)) return ANDROID_ATTR_PERMISSION;
+        if ("readPermission".equals(name)) return ANDROID_ATTR_READ_PERMISSION;
+        if ("protectionLevel".equals(name)) return ANDROID_ATTR_PROTECTION_LEVEL;
+        if ("sharedUserId".equals(name)) return ANDROID_ATTR_SHARED_USER_ID;
+        if ("enabled".equals(name)) return ANDROID_ATTR_ENABLED;
+        if ("exported".equals(name)) return ANDROID_ATTR_EXPORTED;
+        if ("stateNotNeeded".equals(name)) return ANDROID_ATTR_STATE_NOT_NEEDED;
+        if ("excludeFromRecents".equals(name)) return ANDROID_ATTR_EXCLUDE_FROM_RECENTS;
+        if ("grantUriPermissions".equals(name)) return ANDROID_ATTR_GRANT_URI_PERMISSIONS;
+        if ("launchMode".equals(name)) return ANDROID_ATTR_LAUNCH_MODE;
+        if ("configChanges".equals(name)) return ANDROID_ATTR_CONFIG_CHANGES;
+        if ("resource".equals(name)) return ANDROID_ATTR_RESOURCE;
+        if ("minSdkVersion".equals(name)) return ANDROID_ATTR_MIN_SDK;
+        if ("versionCode".equals(name)) return ANDROID_ATTR_VERSION_CODE;
+        if ("versionName".equals(name)) return ANDROID_ATTR_VERSION_NAME;
+        if ("windowSoftInputMode".equals(name)) return ANDROID_ATTR_WINDOW_SOFT_INPUT_MODE;
+        if ("noHistory".equals(name)) return ANDROID_ATTR_NO_HISTORY;
+        if ("targetSdkVersion".equals(name)) return ANDROID_ATTR_TARGET_SDK;
+        if ("maxSdkVersion".equals(name)) return ANDROID_ATTR_MAX_SDK;
+        if ("allowBackup".equals(name)) return ANDROID_ATTR_ALLOW_BACKUP;
+        if ("required".equals(name)) return ANDROID_ATTR_REQUIRED;
+        if ("stopWithTask".equals(name)) return ANDROID_ATTR_STOP_WITH_TASK;
+        if ("isolatedProcess".equals(name)) return ANDROID_ATTR_ISOLATED_PROCESS;
+        if ("supportsRtl".equals(name)) return ANDROID_ATTR_SUPPORTS_RTL;
+        if ("relinquishTaskIdentity".equals(name)) return ANDROID_ATTR_RELINQUISH_TASK_IDENTITY;
+        if ("persistableMode".equals(name)) return ANDROID_ATTR_PERSISTABLE_MODE;
+        if ("autoRemoveFromRecents".equals(name)) return ANDROID_ATTR_AUTO_REMOVE_FROM_RECENTS;
+        if ("extractNativeLibs".equals(name)) return ANDROID_ATTR_EXTRACT_NATIVE_LIBS;
+        if ("fullBackupContent".equals(name)) return ANDROID_ATTR_FULL_BACKUP_CONTENT;
+        if ("usesCleartextTraffic".equals(name)) return ANDROID_ATTR_USES_CLEARTEXT_TRAFFIC;
+        if ("autoVerify".equals(name)) return ANDROID_ATTR_AUTO_VERIFY;
+        if ("resizeableActivity".equals(name)) return ANDROID_ATTR_RESIZEABLE_ACTIVITY;
+        if ("supportsPictureInPicture".equals(name)) return ANDROID_ATTR_SUPPORTS_PIP;
+        if ("directBootAware".equals(name)) return ANDROID_ATTR_DIRECT_BOOT_AWARE;
+        if ("networkSecurityConfig".equals(name)) return ANDROID_ATTR_NETWORK_SECURITY_CONFIG;
+        if ("roundIcon".equals(name)) return ANDROID_ATTR_ROUND_ICON;
+        if ("compileSdkVersion".equals(name)) return ANDROID_ATTR_COMPILE_SDK;
+        if ("compileSdkVersionCodename".equals(name)) return ANDROID_ATTR_COMPILE_SDK_CODENAME;
+        if ("appComponentFactory".equals(name)) return ANDROID_ATTR_APP_COMPONENT_FACTORY;
+        if ("useAppZygote".equals(name)) return ANDROID_ATTR_USE_APP_ZYGOTE;
+        if ("foregroundServiceType".equals(name)) return ANDROID_ATTR_FOREGROUND_SERVICE_TYPE;
+        if ("zygotePreloadName".equals(name)) return ANDROID_ATTR_ZYGOTE_PRELOAD_NAME;
+        if ("dataExtractionRules".equals(name)) return ANDROID_ATTR_DATA_EXTRACTION_RULES;
+        if ("enableOnBackInvokedCallback".equals(name)) {
+            return ANDROID_ATTR_ENABLE_ON_BACK_INVOKED_CALLBACK;
+        }
+        return 0;
     }
 
     private static String knownFrameworkAttrName(int id) {

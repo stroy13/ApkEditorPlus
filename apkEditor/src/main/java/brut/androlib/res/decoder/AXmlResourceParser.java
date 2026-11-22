@@ -490,11 +490,15 @@ public class AXmlResourceParser implements XmlResourceParser {
                         rawValue = null;
                     }
                 }
+                int attrNameIndex = m_attributes[offset + ATTRIBUTE_IX_NAME];
+                String binaryAttrName = attrNameIndex == -1
+                        ? null : m_strings.getString(attrNameIndex);
                 String ret = mAttrDecoder.decode(
                         valueType,
                         valueData,
                         rawValue,
-                        getAttributeNameResource(index));
+                        getAttributeNameResource(index),
+                        binaryAttrName);
                 // A missing current package used to turn typed values whose raw
                 // string index is -1 into an empty string. That is especially
                 // damaging for android:versionCode and other integer manifest
