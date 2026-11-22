@@ -166,7 +166,7 @@ public final class Aapt2Pipeline {
     private static final Pattern SPLIT_REQUIRED_ATTRIBUTE = Pattern.compile(
             "\\s+android:isSplitRequired\\s*=\\s*(['\\\"])[^'\\\"]*\\1");
     private static final Pattern SPLIT_TYPES_ATTRIBUTE = Pattern.compile(
-            "\\s+android:splitTypes\\s*=\\s*(['\\\"])(?=[^'\\\"]*\\S)[^'\\\"]*\\1");
+            "\\s+android:splitTypes\\s*=\\s*(['\\\"])(?=[^'\\\"]*[^\\s'\\\"])[^'\\\"]*\\1");
     private static final Pattern REQUIRED_SPLIT_TYPES_ATTRIBUTE = Pattern.compile(
             "\\s+android:requiredSplitTypes\\s*=\\s*(['\\\"])[^'\\\"]*\\1");
     private static final Pattern EMPTY_SPLIT_TYPES_ATTRIBUTE = Pattern.compile(
