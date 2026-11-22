@@ -430,7 +430,8 @@ public class AXmlResourceParser implements XmlResourceParser {
                 setFirstError(e);
             }
         }
-        if (frameworkName != null && frameworkName.length() != 0) {
+        if (frameworkName != null && frameworkName.length() != 0
+                && !isGeneratedResourceName(frameworkName)) {
             return frameworkName;
         }
         if (value != null && value.length() != 0) {
@@ -440,6 +441,11 @@ public class AXmlResourceParser implements XmlResourceParser {
         // did not contain a usable name. Keep a stable name so XML serialization
         // can continue without a null attribute name.
         return resId != 0 ? String.format("attr_0x%08x", resId) : "";
+    }
+
+    private static boolean isGeneratedResourceName(String name) {
+        return name.startsWith("noname_") || name.indexOf("_dup_") >= 0
+                || name.startsWith("attr_0x");
     }
 
     @Override
