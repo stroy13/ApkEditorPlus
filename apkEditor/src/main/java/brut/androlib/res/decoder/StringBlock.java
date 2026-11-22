@@ -16,12 +16,12 @@
 
 package brut.androlib.res.decoder;
 
-import android.util.SparseArray;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
+import java.util.HashMap;
+import java.util.Map;
 
 import brut.androlib.res.xml.ResXmlEncoders;
 import brut.util.ExtDataInput;
@@ -43,7 +43,10 @@ public class StringBlock {
     private static final int UTF8_FLAG = 0x00000100;
     private final CharsetDecoder UTF16LE_DECODER = Charset.forName("UTF-16LE").newDecoder();
     private final CharsetDecoder UTF8_DECODER = Charset.forName("UTF-8").newDecoder();
-    private SparseArray<String> newValues = new SparseArray<>();
+    // This is only the sparse map of decoded-string replacements. A regular map
+    // keeps the decoder usable in JVM unit tests as well as on Android; the
+    // resource string pool itself remains backed by the compact offset arrays.
+    private final Map<Integer, String> newValues = new HashMap<>();
     /**
      * Returns string with style tags (html-like).
      */
