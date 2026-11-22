@@ -91,27 +91,33 @@ public class ResAttrDecoder {
 
     public String decode(int type, int value, String rawValue, int attrResId,
                         String attrName) throws AndrolibException {
-        if (mCurrentPackage == null) {
-            // No package available (nothing in the table matched): do not crash the
-            // whole file decode, just pass the raw value through.
-            return rawValue != null ? rawValue : "";
-        }
-        ResScalarValue resValue = mCurrentPackage.getValueFactory().factory(
-                type, value, rawValue);
         int namedAttrId = knownFrameworkAttrId(attrName);
         int effectiveAttrId = attrResId;
-        if (namedAttrId != 0 && (attrResId == 0
-                || (((attrResId >>> 24) & 0xff) == 1
-                && !attrName.equals(knownFrameworkAttrName(attrResId))))) {
+        if (namedAttrId != 0 && attrResId != namedAttrId) {
+            // A protected manifest can carry an app-package or decoy resource-map
+            // ID for an android:* attribute. The binary XML name is the safer
+            // source for the framework contract in that case.
             effectiveAttrId = namedAttrId;
         }
 
-        // The binary value type/data pair is authoritative for typed manifest
-        // values. In particular, a protected APK can leave a decimal resource ID
-        // in the raw string slot even though the value is a reference or a flag.
+        // Decode framework enums, flags and typed references before consulting the
+        // APK resource table. Protected APKs can have a usable manifest resource
+        // map while their ARSC package is unavailable; the old early return in
+        // this method preserved values such as "0x2" and "0x2db3" verbatim, which
+        // makes aapt2 reject the decoded XML.
+        ResScalarValue resValue = null;
+        if (mCurrentPackage != null) {
+            resValue = mCurrentPackage.getValueFactory().factory(type, value, rawValue);
+        }
         String known = decodeKnownValue(type, value, rawValue, effectiveAttrId, resValue);
         if (known != null) {
             return known;
+        }
+        if (mCurrentPackage == null) {
+            // No table is available for symbolic lookup. Keep the original string
+            // only after all framework-typed conversions above have had a chance
+            // to normalize it.
+            return rawValue != null ? rawValue : "";
         }
 
         String decoded = null;
@@ -163,6 +169,15 @@ public class ResAttrDecoder {
             String bool = decodeBoolean(type, value, rawValue, resValue);
             if (bool != null) {
                 return bool;
+            }
+            // A boolean may legally be backed by a bool resource. If that
+            // resource cannot be inspected because the protected ARSC package is
+            // unavailable, still normalize the decimal form to an explicit
+            // resource-ID reference; "@213..." is not valid aapt2 XML syntax.
+            Integer referencedId = parseReferenceId(rawValue);
+            if (referencedId != null && (rawValue.startsWith("@")
+                    || rawValue.startsWith("?"))) {
+                return formatReference(referencedId, false);
             }
         }
 
@@ -333,7 +348,10 @@ public class ResAttrDecoder {
     private static boolean isReferenceAttribute(int attrResId) {
         switch (attrResId) {
             case ANDROID_ATTR_THEME:
+            case ANDROID_ATTR_LABEL:
             case ANDROID_ATTR_ICON:
+            case ANDROID_ATTR_PERMISSION:
+            case ANDROID_ATTR_READ_PERMISSION:
             case ANDROID_ATTR_RESOURCE:
             case ANDROID_ATTR_FULL_BACKUP_CONTENT:
             case ANDROID_ATTR_NETWORK_SECURITY_CONFIG:
