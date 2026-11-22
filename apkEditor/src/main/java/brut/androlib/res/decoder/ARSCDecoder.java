@@ -70,6 +70,10 @@ public class ARSCDecoder {
     private static final int TYPE_FLAG_SPARSE = 0x01;
     private static final int TYPE_FLAG_OFFSET16 = 0x02;
     private static final int NO_ENTRY = -1;
+    // A map entry must fit in its containing type chunk. This additional cap
+    // prevents a corrupt count from forcing a large object-array allocation even
+    // when a malformed chunk advertises an implausibly large size.
+    private static final int MAX_COMPLEX_ENTRY_ITEMS = 65536;
     private static final Logger LOGGER = Logger.getLogger(ARSCDecoder.class.getName());
     private static final int KNOWN_CONFIG_BYTES = 56;
     private final ExtDataInput mIn;
@@ -500,7 +504,23 @@ public class ARSCDecoder {
         }
         for (Integer offset : offsetsToEntryData.keySet()) {
             skipToPosition(entriesStartAbsolute + offset, "resource entry");
-            offsetsToEntryData.put(offset, readEntryData());
+            try {
+                offsetsToEntryData.put(offset, readEntryData());
+            } catch (AndrolibException ex) {
+                if (!mKeepBroken) {
+                    throw ex;
+                }
+                // Framework tables can contain newer entry forms that this
+                // resource model cannot represent. Do not let one malformed or
+                // unsupported entry abort the whole framework load; the caller
+                // can still use the other configurations and the parser gate
+                // will report the skipped type in diagnostics.
+                LOGGER.warning("Skipping malformed resource type 0x"
+                        + Integer.toHexString(typeId) + " at offset " + offset
+                        + ": " + ex.getMessage());
+                skipToChunkEnd();
+                return mType;
+            }
         }
 
         for (int i = 0; i < entryOffsets.length; i++) {
@@ -574,7 +594,19 @@ public class ARSCDecoder {
         }
     }
 
+    private long remainingChunkBytes() {
+        return (long) mHeader.endPosition - mCountIn.getCount();
+    }
+
+    private void requireChunkBytes(long bytes, String what) throws AndrolibException {
+        if (bytes < 0 || bytes > remainingChunkBytes()) {
+            throw new AndrolibException("Resource " + what + " exceeds type chunk: need "
+                    + bytes + " bytes, remaining " + remainingChunkBytes());
+        }
+    }
+
     private EntryData readEntryData() throws IOException, AndrolibException {
+        requireChunkBytes(8, "entry header");
         int sizeOrKey = mIn.readUnsignedShort();
         int rawFlags = mIn.readUnsignedShort();
         int keyOrData = mIn.readInt();
@@ -598,6 +630,7 @@ public class ARSCDecoder {
         }
         if (sizeOrKey > 8) {
             int extra = sizeOrKey - 8;
+            requireChunkBytes(extra, "extended entry header");
             if (mIn.skipBytes(extra) != extra) {
                 throw new IOException("Truncated extended resource entry");
             }
@@ -675,16 +708,22 @@ public class ARSCDecoder {
     private ResBagValue readComplexEntry() throws IOException, AndrolibException {
 //        int parent = mIn.readInt();
 //        int count = mIn.readInt();
+        requireChunkBytes(8, "complex entry header");
         int head[] = mIn.readIntArray(2);
         int parent = head[0];
         int count = head[1];
+        if (count < 0 || count > MAX_COMPLEX_ENTRY_ITEMS) {
+            throw new AndrolibException("Invalid complex resource entry count: " + count);
+        }
+        long rawSize = (long) (4 + 8) * count;
+        requireChunkBytes(rawSize, "complex entry values");
 
         ResValueFactory factory = mPkg.getValueFactory();
         Duo<Integer, ResScalarValue>[] items = new Duo[count];
         ResIntBasedValue resValue;
         int resId;
 
-        byte[] raw = new byte[(4 + 8) * count];
+        byte[] raw = new byte[(int) rawSize];
         mIn.readFully(raw);
         for (int i = 0; i < count; i++) {
 //            resId = mIn.readInt();
@@ -733,6 +772,7 @@ public class ARSCDecoder {
     }
 
     private ResIntBasedValue readValue() throws IOException, AndrolibException {
+        requireChunkBytes(8, "value");
 //      /* size */mIn.skipCheckShort((short) 8);
 //      /* zero */mIn.skipCheckByte((byte) 0);
 //        byte type = mIn.readByte();

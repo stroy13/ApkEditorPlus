@@ -122,6 +122,53 @@ public class ARSCDecoderSparseTest {
                 .getResSpec(new ResID(0x7f010000)).getName());
     }
 
+    @Test
+    public void rejectsUnboundedComplexEntryBeforeAllocating() throws Exception {
+        try {
+            ARSCDecoder.decode(new ByteArrayInputStream(malformedComplexResourceTable()),
+                    false, false);
+            fail("Expected an invalid complex entry count");
+        } catch (AndrolibException expected) {
+            assertTrue(expected.getMessage().contains("complex resource entry"));
+        }
+    }
+
+    private static byte[] malformedComplexResourceTable() {
+        byte[] values = stringPool(new String[]{"Hello"});
+        byte[] typeNames = stringPool(new String[]{"array"});
+        byte[] keyNames = stringPool(new String[]{"bad"});
+
+        byte[] typeSpec = new byte[20];
+        ByteBuffer spec = ByteBuffer.wrap(typeSpec).order(ByteOrder.LITTLE_ENDIAN);
+        spec.putShort((short) 0x0202);
+        spec.putShort((short) 16);
+        spec.putInt(typeSpec.length);
+        spec.put((byte) 1);
+        spec.put((byte) 0);
+        spec.putShort((short) 0);
+        spec.putInt(1);
+
+        byte[] type = new byte[68];
+        ByteBuffer config = ByteBuffer.wrap(type).order(ByteOrder.LITTLE_ENDIAN);
+        config.putShort((short) 0x0201);
+        config.putShort((short) 48);
+        config.putInt(type.length);
+        config.put((byte) 1);
+        config.put((byte) 0);
+        config.putShort((short) 0);
+        config.putInt(1);
+        config.putInt(52);
+        config.putInt(28);
+        config.put(new byte[24]);
+        config.putInt(0); // dense entry offset
+        config.putShort((short) 8);
+        config.putShort((short) 1); // FLAG_COMPLEX
+        config.putInt(0); // key index
+        config.putInt(0); // parent
+        config.putInt(Integer.MAX_VALUE); // impossible map count
+        return wrapPackage(values, typeNames, keyNames, typeSpec, type);
+    }
+
     private static byte[] singleEntryResourceTable(int typeFlags, boolean compact) {
         byte[] values = stringPool(new String[]{"Hello"});
         byte[] typeNames = stringPool(new String[]{"string"});
