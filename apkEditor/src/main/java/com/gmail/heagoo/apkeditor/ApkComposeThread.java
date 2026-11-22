@@ -656,7 +656,7 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
             replaceLen += key2.getBytes().length + value2.getBytes().length + 2;
         }
         if (com.gmail.heagoo.apkeditor.util.Aapt2ResourceTableFallback.restoreOriginalIfEmpty(
-                this.tempApkPath, this.targetApkPath) && this.buildTrace != null && this.buildTrace.logger() != null) {
+                this.tempApkPath, this.srcApkPath) && this.buildTrace != null && this.buildTrace.logger() != null) {
             this.buildTrace.logger().log("AAPT2 emitted an empty resource table; preserved the original resources.arsc");
         }
         ZipEngine.modify(this.ctx, this.targetApkPath, this.tempApkPath, sb1.toString(), addLen, sb2.toString(), deleteLen, sb3.toString(), replaceLen);
