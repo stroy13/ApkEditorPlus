@@ -19,6 +19,7 @@ public class ResAttrDecoderTest {
     private static final int CONFIG_CHANGES = ANDROID | 0x0001001f;
     private static final int LAUNCH_MODE = ANDROID | 0x0001001d;
     private static final int WINDOW_SOFT_INPUT_MODE = ANDROID | 0x0001022b;
+    private static final int FOREGROUND_SERVICE_TYPE = ANDROID | 0x00010599;
     private static final int ENABLE_ON_BACK_INVOKED_CALLBACK = ANDROID | 0x0001066c;
 
     @Test
@@ -35,6 +36,11 @@ public class ResAttrDecoderTest {
                 LAUNCH_MODE, "launchMode"));
         assertEquals("adjustResize", decoder.decode(TypedValue.TYPE_STRING, 0, "0x10",
                 WINDOW_SOFT_INPUT_MODE, "windowSoftInputMode"));
+        assertEquals("stateAlwaysHidden|adjustResize",
+                decoder.decode(TypedValue.TYPE_STRING, 0, "0x13",
+                        WINDOW_SOFT_INPUT_MODE, "windowSoftInputMode"));
+        assertEquals("specialUse", decoder.decode(TypedValue.TYPE_STRING, 0,
+                "0x40000000", FOREGROUND_SERVICE_TYPE, "foregroundServiceType"));
     }
 
     @Test
