@@ -24,14 +24,34 @@ public final class MissingResourceAttributes {
     public static Set<String> find(String diagnostic, String manifestXml) {
         String appPackage = packageName(manifestXml);
         Set<String> names = new LinkedHashSet<>();
-        if (appPackage.isEmpty() || diagnostic == null) return names;
+        if (diagnostic == null) return names;
+        Set<String> diagnosticPackages = new LinkedHashSet<>();
         Matcher aapt2 = AAPT2_DIAGNOSTIC.matcher(diagnostic);
         while (aapt2.find()) {
-            if (appPackage.equals(aapt2.group(1))) names.add(aapt2.group(2));
+            String pkg = aapt2.group(1);
+            if (appPackage.equals(pkg)) names.add(aapt2.group(2));
+            if (!"android".equals(pkg)) diagnosticPackages.add(pkg);
         }
         Matcher aapt1 = AAPT1_DIAGNOSTIC.matcher(diagnostic);
         while (aapt1.find()) {
-            if (appPackage.equals(aapt1.group(2))) names.add(aapt1.group(1));
+            String pkg = aapt1.group(2);
+            if (appPackage.equals(pkg)) names.add(aapt1.group(1));
+            if (!"android".equals(pkg)) diagnosticPackages.add(pkg);
+        }
+        // Some protected/legacy decodes produce a manifest without a readable
+        // package attribute. In that case only infer the app namespace when the
+        // linker reports exactly one non-framework package; never guess among
+        // multiple package namespaces.
+        if (names.isEmpty() && appPackage.isEmpty() && diagnosticPackages.size() == 1) {
+            String onlyPackage = diagnosticPackages.iterator().next();
+            aapt2.reset();
+            while (aapt2.find()) {
+                if (onlyPackage.equals(aapt2.group(1))) names.add(aapt2.group(2));
+            }
+            aapt1.reset();
+            while (aapt1.find()) {
+                if (onlyPackage.equals(aapt1.group(2))) names.add(aapt1.group(1));
+            }
         }
         return names;
     }

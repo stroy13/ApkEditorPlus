@@ -27,6 +27,16 @@ public class MissingResourceAttributesTest {
                 "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"org.mozilla.firefox\"/>"));
     }
 
+    @Test public void infersMissingAppAttributesOnlyWhenManifestPackageIsUnavailableAndUnambiguous() {
+        String errors = "layout/a.xml: error: attribute glance_isTopLevelLayout (aka org.mozilla.firefox:glance_isTopLevelLayout) not found."
+                + System.lineSeparator() + "layout/b.xml: error: attribute label (aka android:label) not found.";
+        assertEquals(new LinkedHashSet<>(Arrays.asList("glance_isTopLevelLayout")),
+                MissingResourceAttributes.find(errors, "<manifest/>"));
+        String ambiguous = errors + System.lineSeparator()
+                + "layout/c.xml: error: attribute custom (aka com.example.lib:custom) not found.";
+        assertTrue(MissingResourceAttributes.find(ambiguous, "<manifest/>").isEmpty());
+    }
+
     @Test public void parsesLegacyAaptDiagnosticsFromTheAppPackage() {
         String errors = "res/layout/a.xml:2: error: No resource identifier found for attribute 'glance_isTopLevelLayout' in package 'org.mozilla.firefox'\n"
                 + "res/layout/b.xml:2: error: No resource identifier found for attribute 'otherFlag' in package 'org.mozilla.firefox'\n"
