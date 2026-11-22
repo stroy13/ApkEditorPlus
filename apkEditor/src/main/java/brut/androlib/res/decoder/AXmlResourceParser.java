@@ -350,16 +350,16 @@ public class AXmlResourceParser implements XmlResourceParser {
             // name. Use the resource-map package id as a second source: 0x01 is
             // always the Android framework, while 0x7f is this APK's package.
             int name = m_attributes[offset + ATTRIBUTE_IX_NAME];
-            if (m_resourceIDs != null && name >= 0 && name < m_resourceIDs.length) {
-                int resourceId = m_resourceIDs[name];
-                int packageId = (resourceId >>> 24) & 0xff;
-                if (packageId == 1) {
-                    value = android_ns;
-                } else if (packageId == 0x7f) {
-                    String appNamespace = getPossibleNamespace();
-                    if (appNamespace != null) {
-                        value = appNamespace;
-                    }
+            int resourceId = m_resourceIDs != null && name >= 0 && name < m_resourceIDs.length
+                    ? m_resourceIDs[name] : 0;
+            int packageId = (resourceId >>> 24) & 0xff;
+            if (AndroidManifestAttributeNames.isFrameworkAttribute(resourceId)
+                    || packageId == 1) {
+                value = android_ns;
+            } else if ((resourceId & 0x7f000000) == 0x7f000000) {
+                String appNamespace = getPossibleNamespace();
+                if (appNamespace != null) {
+                    value = appNamespace;
                 }
             }
             // Original logical from apktool. Obfuscated manifests can contain
@@ -433,6 +433,16 @@ public class AXmlResourceParser implements XmlResourceParser {
         }
         if (value != null && value.length() != 0) {
             return value;
+        }
+        if (AndroidManifestAttributeNames.isFrameworkAttribute(resId)) {
+            String pooledName = name == -1 ? null : m_strings.getString(name);
+            if (AndroidManifestAttributeNames.isValidAttributeName(pooledName)) {
+                return pooledName;
+            }
+        }
+        String knownName = AndroidManifestAttributeNames.nameFor(resId);
+        if (knownName != null) {
+            return knownName;
         }
         // The framework resource table could not be loaded and the string pool
         // did not contain a usable name. Keep a stable name so XML serialization

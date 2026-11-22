@@ -2746,6 +2746,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         String targetApkPath = createOutputPath(this.apkPath, outputDir, FileUtil.reviseFileName(filename));
         Intent intent = new Intent((Context) this, (Class<?>) ApkComposeService.class);
         ActivityUtil.attachParam(intent, "decodeRootPath", this.decodeRootPath);
+        ActivityUtil.attachParam(intent, "originalApkPath", this.apkPath);
         if (!this.isFullDecoding) {
             ActivityUtil.attachParam(intent, "srcApkPath", this.apkPath);
         }

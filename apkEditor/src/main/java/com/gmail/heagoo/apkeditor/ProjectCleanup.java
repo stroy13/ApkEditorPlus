@@ -104,8 +104,29 @@ final class ProjectCleanup {
                     return false;
                 }
                 File dir = directories.get(i);
-                if (!operation.delete(dir) && Files.exists(dir.toPath(), LinkOption.NOFOLLOW_LINKS)) {
-                    throw new IOException("Cannot delete old project directory: " + dir);
+                IOException deleteFailure = null;
+                for (int attempt = 0; attempt < 4; attempt++) {
+                    if (!Files.exists(dir.toPath(), LinkOption.NOFOLLOW_LINKS)) break;
+                    try {
+                        if (operation.delete(dir)
+                                || !Files.exists(dir.toPath(), LinkOption.NOFOLLOW_LINKS)) break;
+                    } catch (RuntimeException e) {
+                        deleteFailure = new IOException("Directory delete attempt " + (attempt + 1) + " failed", e);
+                    }
+                    if (attempt < 3) {
+                        try {
+                            Thread.sleep(50L * (attempt + 1));
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            throw new IOException("Cleanup interrupted", e);
+                        }
+                    }
+                }
+                if (Files.exists(dir.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                    String[] remaining = dir.list();
+                    throw new IOException("Cannot delete old project directory: " + dir
+                            + (remaining == null ? " (contents unavailable)" : " (remaining entries=" + remaining.length + ")"),
+                            deleteFailure);
                 }
             }
             pool.shutdown();
