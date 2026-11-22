@@ -167,12 +167,11 @@ public final class SignHelper {
             validateOutputWithAndroid(ctx, new File(targetApkPath), out);
         } catch (Exception e) {
             if (out != null) {
-                out.log("Output rejected by Android package parser; removing unusable APK: " + e);
+                out.log("Android package parser rejected the generated APK; preserving signed output for diagnosis: " + e);
             }
-            // The pipeline publishes atomically before this final framework check.
-            // Do not leave an APK that the installer cannot parse.
-            //noinspection ResultOfMethodCallIgnored
-            new File(targetApkPath).delete();
+            // Keep the signed artifact so the user can inspect it or attempt installation.
+            // ZIP integrity and apksig verification have already passed; this independent
+            // framework parser check is inconclusive when it returns null without a cause.
             throw e;
         }
     }
