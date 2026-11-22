@@ -7,7 +7,9 @@ import android.util.Log;
 import brut.androlib.AndrolibException;
 import brut.androlib.res.data.ResPackage;
 import brut.androlib.res.data.ResResSpec;
+import brut.androlib.res.data.ResResource;
 import brut.androlib.res.data.ResTable;
+import brut.androlib.res.data.value.ResStringValue;
 import brut.androlib.res.decoder.ARSCDecoder;
 import brut.androlib.res.util.ExtFile;
 import brut.directory.Directory;
@@ -531,8 +533,7 @@ public class ApkParseThread extends Thread {
     private int countStringSpecs(ResPackage pkg) {
         int count = 0;
         for (ResResSpec spec : pkg.listResSpecs()) {
-            if (spec != null && spec.getType() != null
-                    && "string".equalsIgnoreCase(spec.getType().getName())) {
+            if (isStringResourceSpec(spec)) {
                 count++;
             }
         }
@@ -542,13 +543,26 @@ public class ApkParseThread extends Thread {
     private int countStringResources(ResPackage pkg) {
         int count = 0;
         for (ResResSpec spec : pkg.listResSpecs()) {
-            if (spec != null && spec.getType() != null
-                    && "string".equalsIgnoreCase(spec.getType().getName())
-                    && spec.getAllResources() != null) {
+            if (isStringResourceSpec(spec) && spec.getAllResources() != null) {
                 count += spec.getAllResources().size();
             }
         }
         return count;
+    }
+
+    private boolean isStringResourceSpec(ResResSpec spec) {
+        if (spec == null || spec.getType() == null) {
+            return false;
+        }
+        if ("string".equalsIgnoreCase(spec.getType().getName())) {
+            return true;
+        }
+        for (ResResource resource : spec.listResources()) {
+            if (resource != null && resource.getValue() instanceof ResStringValue) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private ResPackage[] getResPackagesFromApk(ExtFile apkFile, ResTable resTable, boolean keepBroken) throws AndrolibException {

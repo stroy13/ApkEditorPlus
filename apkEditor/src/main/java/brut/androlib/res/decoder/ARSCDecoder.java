@@ -159,6 +159,21 @@ public class ARSCDecoder {
         return packages;
     }
 
+    private static boolean isStringResourceSpec(ResResSpec spec) {
+        if (spec == null || spec.getType() == null) {
+            return false;
+        }
+        if ("string".equalsIgnoreCase(spec.getType().getName())) {
+            return true;
+        }
+        for (ResResource resource : spec.listResources()) {
+            if (resource != null && resource.getValue() instanceof ResStringValue) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static void logPackageSummary(ResPackage[] packages, boolean protectedApk,
                                           boolean keepBroken) {
         if (packages == null) {
@@ -174,8 +189,7 @@ public class ARSCDecoder {
             int stringResources = 0;
             if (pkg != null) {
                 for (ResResSpec spec : pkg.listResSpecs()) {
-                    if (spec != null && spec.getType() != null
-                            && "string".equalsIgnoreCase(spec.getType().getName())) {
+                    if (isStringResourceSpec(spec)) {
                         stringSpecs++;
                         if (spec.getAllResources() != null) {
                             stringResources += spec.getAllResources().size();

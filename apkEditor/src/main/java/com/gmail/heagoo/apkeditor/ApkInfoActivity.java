@@ -49,6 +49,7 @@ import brut.androlib.res.data.ResResSpec;
 import brut.androlib.res.data.ResResource;
 import brut.androlib.res.data.value.ResReferenceValue;
 import brut.androlib.res.data.value.ResScalarValue;
+import brut.androlib.res.data.value.ResStringValue;
 import brut.androlib.res.xml.ResXmlEncoders;
 import brut.util.Duo;
 import brut.util.KXmlSerializer;
@@ -3070,6 +3071,24 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
                 + ", selected=" + this.curConfig;
     }
 
+    private boolean isStringResourceSpec(ResResSpec spec) {
+        if (spec == null || spec.getType() == null) {
+            return false;
+        }
+        if ("string".equalsIgnoreCase(spec.getType().getName())) {
+            return true;
+        }
+        // Resource obfuscators sometimes rename the type table entry as well as
+        // the spec. The value factory still retains the semantic string type, so
+        // use it as a fallback instead of losing every entry from the String tab.
+        for (ResResource resource : spec.listResources()) {
+            if (resource != null && resource.getValue() instanceof ResStringValue) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean prepareStringList() {
         HashMap<String, ArrayList<StringItem>> valuesByConfig = new HashMap<>();
         this.allStringValues = valuesByConfig;
@@ -3091,8 +3110,7 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         // the editor usable for protected APKs whose values decoder has to skip a
         // malformed entry, and it also preserves styled string metadata.
         for (ResResSpec spec : pkg.listResSpecs()) {
-            if (spec == null || spec.getType() == null
-                    || !"string".equalsIgnoreCase(spec.getType().getName())) {
+            if (!isStringResourceSpec(spec)) {
                 continue;
             }
             String name = spec.getName();
