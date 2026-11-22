@@ -38,11 +38,11 @@ public class ResAttrDecoderTest {
     }
 
     @Test
-    public void normalizesUnresolvedReferencesToHexResourceIds() throws Exception {
+    public void normalizesUnresolvedReferencesToNullInsteadOfNumericLiterals() throws Exception {
         ResAttrDecoder decoder = new ResAttrDecoder();
-        assertEquals("@0x7f100100", decoder.decode(TypedValue.TYPE_STRING, 0,
+        assertEquals("@null", decoder.decode(TypedValue.TYPE_STRING, 0,
                 "@2131755264", ICON, "icon"));
-        assertEquals("@0x7f010005", decoder.decode(TypedValue.TYPE_STRING, 0,
+        assertEquals("@null", decoder.decode(TypedValue.TYPE_STRING, 0,
                 "@2130771973", ENABLE_ON_BACK_INVOKED_CALLBACK,
                 "enableOnBackInvokedCallback"));
     }

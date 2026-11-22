@@ -324,9 +324,14 @@ public class ResAttrDecoder {
                         theme && "attr".equals(spec.getType().getName()));
             }
         } catch (Exception ignored) {
-            // Use the typed literal below when the app/framework table cannot resolve it.
+            // Fall through to a valid null reference when the app/framework table
+            // cannot resolve the ID.
         }
-        return (theme ? "?" : "@") + String.format("0x%08x", id);
+        // AAPT2 does not accept a numeric literal for a typed manifest
+        // reference. If the selected/protected table cannot provide a symbolic
+        // name, emit the valid null reference rather than producing another
+        // manifest that is guaranteed to fail at link time.
+        return "@null";
     }
 
     private static Integer integerValue(int type, int value, String rawValue,
