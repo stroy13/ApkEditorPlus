@@ -69,7 +69,7 @@ public final class Aapt2Pipeline {
             String manifestBeforeRepair = new String(Files.readAllBytes(new File(linkManifest).toPath()),
                     java.nio.charset.StandardCharsets.UTF_8);
             String manifestAfterRepair = repairSyntheticFrameworkAttributeNames(manifestBeforeRepair);
-            manifestAfterRepair = removeEmptyVersionCode(manifestAfterRepair);
+            manifestAfterRepair = removeEmptyAndroidAttributes(manifestAfterRepair);
             if (!manifestBeforeRepair.equals(manifestAfterRepair)) {
                 if (stagedManifest == null) {
                     stagedManifest = Files.createTempFile(out.getAbsoluteFile().getParentFile().toPath(),
@@ -154,11 +154,11 @@ public final class Aapt2Pipeline {
 
     private static final Pattern SYNTHETIC_FRAMEWORK_ATTRIBUTE = Pattern.compile(
             "android:attr_0x([0-9a-fA-F]{8})");
-    private static final Pattern EMPTY_VERSION_CODE = Pattern.compile(
-            "\\s+android:versionCode\\s*=\\s*(['\\\"])(?:\\s*)\\1");
+    private static final Pattern EMPTY_ANDROID_ATTRIBUTE = Pattern.compile(
+            "\\s+android:[A-Za-z_][A-Za-z0-9_.-]*\\s*=\\s*(['\\\"])(?:\\s*)\\1");
 
-    static String removeEmptyVersionCode(String manifestXml) {
-        return EMPTY_VERSION_CODE.matcher(manifestXml).replaceAll("");
+    static String removeEmptyAndroidAttributes(String manifestXml) {
+        return EMPTY_ANDROID_ATTRIBUTE.matcher(manifestXml).replaceAll("");
     }
 
     static String repairSyntheticFrameworkAttributeNames(String manifestXml) {

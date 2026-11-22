@@ -20,13 +20,14 @@ public class Aapt2ManifestCompatibilityTest {
         assertFalse(Aapt2Pipeline.safeRetryWarnings("x: warning: unexpected element <bad> found in <manifest>."));
         assertTrue(Aapt2Pipeline.safeRetryWarnings("x: warning: unexpected element <queries> found in <manifest>."));
     }
-    @Test public void removesOnlyEmptyVersionCodeAttributes() {
-        String fixed = Aapt2Pipeline.removeEmptyVersionCode(
-                "<manifest package=\"x\" android:versionCode=\"  \" android:versionName=\"\"/>" );
+    @Test public void removesAllEmptyAndroidAttributesAndPreservesNonEmptyValues() {
+        String source = "<manifest package=\"x\" android:versionCode=\"  \" android:required=\"\" "
+                + "android:label=\"app\" custom:value=\"\"/>";
+        String fixed = Aapt2Pipeline.removeEmptyAndroidAttributes(source);
         assertFalse(fixed.contains("android:versionCode"));
-        assertTrue(fixed.contains("android:versionName=\"\""));
-        assertTrue(Aapt2Pipeline.removeEmptyVersionCode("<manifest android:versionCode='7'/>")
-                .contains("android:versionCode='7'"));
+        assertFalse(fixed.contains("android:required"));
+        assertTrue(fixed.contains("android:label=\"app\""));
+        assertTrue(fixed.contains("custom:value=\"\""));
     }
 
     @Test public void repairsKnownSyntheticFrameworkAttributeNamesWithoutTouchingUnknownIds() {
