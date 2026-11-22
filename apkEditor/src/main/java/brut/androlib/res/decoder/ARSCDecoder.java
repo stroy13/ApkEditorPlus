@@ -700,13 +700,13 @@ public class ARSCDecoder {
                 //spec = new ResResSpec(resId, mSpecNames.getString(specNamesId), mPkg, mTypeSpec);
                 spec = new ResResSpec(resId, getResName(resId.id, specNamesId), mPkg, mTypeSpec, mApkProtected);
                 mPkg.addResSpec(spec);
-                mTypeSpec.addResSpec(spec);
+                addResSpecToType(spec);
             }
         } else {
             //spec = new ResResSpec(resId, mSpecNames.getString(specNamesId), mPkg, mTypeSpec);
             spec = new ResResSpec(resId, getResName(resId.id, specNamesId), mPkg, mTypeSpec, mApkProtected);
             mPkg.addResSpec(spec);
-            mTypeSpec.addResSpec(spec);
+            addResSpecToType(spec);
         }
         ResResource res = new ResResource(mType, spec, value);
 
@@ -1033,6 +1033,23 @@ public class ARSCDecoder {
         }
 
         this.mMissingResSpecsDone = true;
+    }
+
+    private void addResSpecToType(ResResSpec spec) throws AndrolibException {
+        try {
+            mTypeSpec.addResSpec(spec);
+        } catch (AndrolibException ex) {
+            if (!mKeepBroken) {
+                throw ex;
+            }
+            // A modern framework table can retain two entry IDs with the same
+            // source name (for example a generated alias). The package's ID map
+            // still preserves both resources, while the legacy type map can only
+            // expose one name. Keep parsing the table and report the lossy name
+            // collision instead of aborting the whole framework load.
+            LOGGER.warning("Keeping resource with duplicate type name " + spec.getName()
+                    + " at " + spec.getId());
+        }
     }
 
     private void removeResSpec(ResResSpec spec) throws AndrolibException {
