@@ -327,12 +327,12 @@ public final class ApkBuildPipeline {
             if (manifest == null || manifest.isDirectory()) {
                 throw new IOException("Resource APK has no AndroidManifest.xml: " + apk);
             }
-            validateManifest(readEntry(zip, manifest));
+            ApkStructureValidator.validateManifest(readEntry(zip, manifest));
             ZipEntry resources = zip.getEntry("resources.arsc");
             if (resources == null || resources.isDirectory()) {
                 throw new IOException("Resource APK has no resources.arsc: " + apk);
             }
-            validateResources(readEntry(zip, resources));
+            ApkStructureValidator.validateResources(readEntry(zip, resources));
         } catch (java.util.zip.ZipException e) {
             throw new IOException("Resource APK is not a readable ZIP: " + apk, e);
         }
