@@ -187,6 +187,9 @@ public final class SignHelper {
         PackageManager pm = ctx.getPackageManager();
         PackageInfo info = pm.getPackageArchiveInfo(apk.getAbsolutePath(), PackageManager.GET_META_DATA);
         if (info == null || info.applicationInfo == null || info.packageName == null) {
+            ManifestInfo manifest = readManifest(apk);
+            String splitDiagnostic = splitArchiveDiagnostic(manifest);
+            if (splitDiagnostic != null) throw new IOException(splitDiagnostic + ": " + apk);
             throw new IOException("Android package parser cannot read generated APK: " + apk);
         }
         if (out != null) {
@@ -218,6 +221,17 @@ public final class SignHelper {
                 }
             }
         }
+    }
+
+    static String splitArchiveDiagnostic(ManifestInfo manifest) {
+        if (manifest != null && manifest.isSplitRequired
+                && (manifest.splitTypes == null || manifest.splitTypes.isEmpty())) {
+            return "This is a split APK base requiring additional APK splits"
+                    + (manifest.requiredSplitTypes == null || manifest.requiredSplitTypes.isEmpty()
+                    ? "" : " (required: " + manifest.requiredSplitTypes + ")")
+                    + "; build from a universal APK or provide the complete split set";
+        }
+        return null;
     }
 
     private static ManifestInfo readManifest(File apk) throws Exception {
