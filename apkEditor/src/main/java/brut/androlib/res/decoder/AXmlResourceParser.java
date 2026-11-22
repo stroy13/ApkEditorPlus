@@ -329,15 +329,12 @@ public class AXmlResourceParser implements XmlResourceParser {
     public String getAttributeNamespace(int index) {
         int offset = getAttributeOffset(index);
         int namespace = m_attributes[offset + ATTRIBUTE_IX_NAMESPACE_URI];
-        if (namespace == -1) {
-            return "";
-        }
 
         // hacky: if the attribute names are proguarded, then so are the namespace
         // I don't know where these are located yet in the file, but it is always
         // this.android_ns in testing, so we will default to that for now.
         // @todo figure out where proguarded namespaces are stored.
-        String value = m_strings.getString(namespace);
+        String value = namespace == -1 ? "" : m_strings.getString(namespace);
 
 //        if (value.length() == 0) {
 //            int offsetName = getAttributeOffset(index);
