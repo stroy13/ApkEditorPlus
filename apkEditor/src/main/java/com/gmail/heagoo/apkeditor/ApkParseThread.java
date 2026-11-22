@@ -553,6 +553,19 @@ public class ApkParseThread extends Thread {
         return count;
     }
 
+    private int countStringResources(ResPackage[] packages) {
+        int count = 0;
+        if (packages == null) {
+            return 0;
+        }
+        for (ResPackage pkg : packages) {
+            if (!isFrameworkPackage(pkg)) {
+                count += countStringResources(pkg);
+            }
+        }
+        return count;
+    }
+
     private int countStringResources(ResPackage pkg) {
         int count = 0;
         for (ResResSpec spec : pkg.listResSpecs()) {
