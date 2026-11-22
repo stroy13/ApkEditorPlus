@@ -475,6 +475,18 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
         }
     }
 
+    private void restoreEmptyResourceTable(File output) throws IOException {
+        if (this.originalApkPath == null || !new File(this.originalApkPath).isFile()) {
+            return;
+        }
+        if (Aapt2ResourceTableFallback.restoreOriginalIfEmpty(
+                output.getAbsolutePath(), this.originalApkPath)
+                && this.buildTrace != null && this.buildTrace.logger() != null) {
+            this.buildTrace.logger().log(
+                    "AAPT2 emitted an empty resource table before validation; preserved the original resources.arsc");
+        }
+    }
+
     private boolean composeResource() {
         try {
             ManifestResourceReferenceNormalizer.normalize(
@@ -497,6 +509,7 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
                         String aapt2 = new File(this.ctx.getApplicationInfo().nativeLibraryDir, newest ? "libaapt2_37.so" : "libaapt2_exec.so").getAbsolutePath();
                         Aapt2Pipeline.build(aapt2, selectedFramework, this.decodedFilePath + "/res", this.decodedFilePath + "/AndroidManifest.xml", this.resourceApkPath, this.buildTrace == null ? null : this.buildTrace.logger());
                         File output = new File(this.resourceApkPath);
+                        restoreEmptyResourceTable(output);
                         ApkBuildPipeline.validateResourceArchive(output);
                         if (this.buildTrace != null && this.buildTrace.logger() != null) {
                             this.buildTrace.logger().log("AAPT2 resource archive validated: "
@@ -552,7 +565,9 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
             LOGGER.info("stdout: " + cr.getStdOut() + ", ret=" + ret);
             if (ret) {
                 try {
-                    ApkBuildPipeline.validateResourceArchive(new File(this.resourceApkPath));
+                    File output = new File(this.resourceApkPath);
+                    restoreEmptyResourceTable(output);
+                    ApkBuildPipeline.validateResourceArchive(output);
                     if (this.buildTrace != null && this.buildTrace.logger() != null) {
                         this.buildTrace.logger().log("Legacy AAPT resource archive validated: "
                                 + new File(this.resourceApkPath).length() + " bytes");
