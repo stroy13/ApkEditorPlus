@@ -16,7 +16,6 @@
 
 package brut.androlib.res.decoder;
 
-import android.util.Log;
 import android.util.TypedValue;
 
 import com.google.common.io.LittleEndianDataInputStream;
@@ -30,6 +29,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.logging.Logger;
 
 import brut.androlib.AndrolibException;
@@ -63,6 +64,20 @@ public class ARSCDecoder {
     private final static short ENTRY_FLAG_COMPLEX = 0x0001;
     private final static short ENTRY_FLAG_PUBLIC = 0x0002;
     private final static short ENTRY_FLAG_WEAK = 0x0004;
+    private final static short ENTRY_FLAG_COMPACT = 0x0008;
+    // ResTable_type flags. Bundletool enables sparse encoding for APK variants
+    // whose effective minSdk is 32 (Android 12L/S_V2).
+    private static final int TYPE_FLAG_SPARSE = 0x01;
+    private static final int TYPE_FLAG_OFFSET16 = 0x02;
+    private static final int NO_ENTRY = -1;
+    // A map entry must fit in its containing type chunk. This additional cap
+    // prevents a corrupt count from forcing a large object-array allocation even
+    // when a malformed chunk advertises an implausibly large size.
+    private static final int MAX_COMPLEX_ENTRY_ITEMS = 65536;
+    // A resource table should contain only a small number of package chunks. Keep
+    // malformed packageCount values from turning into an unbounded array
+    // allocation before the first package can be validated.
+    private static final int MAX_PACKAGE_COUNT = 0xffff;
     private static final Logger LOGGER = Logger.getLogger(ARSCDecoder.class.getName());
     private static final int KNOWN_CONFIG_BYTES = 56;
     private final ExtDataInput mIn;
@@ -134,6 +149,9 @@ public class ARSCDecoder {
     private ResPackage[] readTableHeader() throws IOException, AndrolibException {
         nextChunkCheckType(Header.TYPE_TABLE);
         int packageCount = mIn.readInt();
+        if (packageCount < 0 || packageCount > MAX_PACKAGE_COUNT) {
+            throw new AndrolibException("Invalid resource package count: " + packageCount);
+        }
 
         mTableStrings = StringBlock.read(mIn);
         //dumpStrings(mTableStrings);
@@ -177,7 +195,7 @@ public class ARSCDecoder {
     private static void logPackageSummary(ResPackage[] packages, boolean protectedApk,
                                           boolean keepBroken) {
         if (packages == null) {
-            Log.i("ARSCDecoder", "decoded packages=null; protected=" + protectedApk
+            LOGGER.info("decoded packages=null; protected=" + protectedApk
                     + "; keepBroken=" + keepBroken);
             return;
         }
@@ -206,7 +224,7 @@ public class ARSCDecoder {
                 result.append(" [null]");
             }
         }
-        Log.i("ARSCDecoder", result.toString());
+        LOGGER.info(result.toString());
     }
 
     private void dumpStrings(StringBlock strBlock) {
@@ -343,10 +361,6 @@ public class ARSCDecoder {
             resTypeSpec = readSingleTableTypeSpec();
             addTypeSpec(resTypeSpec);
             type = nextChunk().type;
-
-            if (!mResTable.getSparseResources()) {
-                mResTable.setSparseResources(true);
-            }
         }
 
         // Nearly all time consumed here
@@ -373,15 +387,27 @@ public class ARSCDecoder {
     private ResTypeSpec readSingleTableTypeSpec() throws AndrolibException, IOException {
         checkChunkType(Header.TYPE_SPEC_TYPE);
         int id = mIn.readUnsignedByte();
-        mIn.skipBytes(3);
+        if (id == 0 || id > mTypeNames.getCount()) {
+            throw new AndrolibException("Invalid resource type-spec ID: " + id);
+        }
+        if (mIn.skipBytes(3) != 3) {
+            throw new IOException("Truncated resource type-spec header");
+        }
         int entryCount = mIn.readInt();
+        if (entryCount < 0 || entryCount > 0xffff) {
+            throw new AndrolibException("Invalid resource type-spec entry count: " + entryCount);
+        }
+        long flagsBytes = (long) entryCount * 4;
+        requireChunkBytes(flagsBytes, "type-spec flags");
 
         if (mFlagsOffsets != null) {
             mFlagsOffsets.add(new FlagsOffset(mCountIn.getCount(), entryCount));
         }
 
         /* flags */
-        mIn.skipBytes(entryCount * 4);
+        if (mIn.skipBytes(entryCount * 4) != entryCount * 4) {
+            throw new IOException("Truncated resource type-spec flags");
+        }
         mTypeSpec = new ResTypeSpec(mTypeNames.getString(id - 1), mResTable, mPkg, id, entryCount);
         mPkg.addType(mTypeSpec);
         this.mMissingResSpecsDone = false;
@@ -390,46 +416,83 @@ public class ARSCDecoder {
 
     private ResType readTableType() throws IOException, AndrolibException {
         checkChunkType(Header.TYPE_TYPE);
-        //byte typeId = mIn.readByte();
+        // ResTable_type fields after the common chunk header:
+        // id (u8), flags (u8), reserved (u16), entryCount (u32),
+        // entriesStart (u32). The configuration follows these fields.
         mIn.readFully(perfBuf);
         int typeId = perfBuf[0] & 0xff;
-        if (mResTypeSpecs.containsKey(typeId)) {
-            mResId = (0xff000000 & mResId) | mResTypeSpecs.get(typeId).getId() << 16;
-            mTypeSpec = mResTypeSpecs.get(typeId);
+        int typeFlags = perfBuf[1] & 0xff;
+        if (typeId == 0 || typeId > mTypeNames.getCount()) {
+            throw new AndrolibException("Invalid resource type ID: " + typeId);
         }
-        //   int typeFlags = mIn.readByte();
-        // Added by Pujiang
+        ResTypeSpec typeSpec = mResTypeSpecs.get(typeId);
+        if (typeSpec == null) {
+            throw new AndrolibException("Resource type has no matching type-spec: " + typeId);
+        }
+        mResId = (0xff000000 & mResId) | typeSpec.getId() << 16;
+        mTypeSpec = typeSpec;
+        if ((typeFlags & (TYPE_FLAG_SPARSE | TYPE_FLAG_OFFSET16))
+                == (TYPE_FLAG_SPARSE | TYPE_FLAG_OFFSET16)) {
+            throw new AndrolibException("Resource type cannot use sparse and offset16 indexes together");
+        }
+        if ((typeFlags & TYPE_FLAG_SPARSE) != 0) {
+            // Keep the fact that the input used a sparse type-entry index. This
+            // is diagnostic state today, and also prevents later writers from
+            // accidentally treating the table as an ordinary dense table.
+            mResTable.setSparseResources(true);
+        }
         if (typeId < mIsFileValues.length) {
             mIsFileValue = this.mIsFileValues[typeId - 1];
         } else {
             mIsFileValue = false;
         }
 
-        // /* res0, res1 */mIn.skipBytes(3);
-        // int entryCount = mIn.readInt();
-        // int entriesStart = mIn.readInt();
-        int entryCount = (perfBuf[7] & 0xff) << 24 | (perfBuf[6] & 0xff) << 16
-                | (perfBuf[5] & 0xff) << 8 | (perfBuf[4] & 0xff);
-        int entriesStart = (perfBuf[11] & 0xff) << 24 | (perfBuf[10] & 0xff) << 16
-                | (perfBuf[9] & 0xff) << 8 | (perfBuf[8] & 0xff);
-        //Log.d("DEBUG", "\ttypeId=" + typeId + ", entryCount=" + entryCount);
-
-        mMissingResSpecs = new boolean[entryCount];
-        Arrays.fill(mMissingResSpecs, true);
-
-        ResConfigFlags flags = readConfigFlags();
-        int position = (mHeader.startPosition + entriesStart) - (entryCount * 4);
-
-        // For some APKs there is a disconnect between the reported size of Configs
-        // If we find a mismatch skip those bytes.
-        if (position != mCountIn.getCount()) {
-            mIn.skipBytes(position - mCountIn.getCount());
+        int encodedEntryCount = readLittleEndianInt(perfBuf, 4);
+        int entriesStart = readLittleEndianInt(perfBuf, 8);
+        if (encodedEntryCount < 0 || encodedEntryCount > 0xffff) {
+            throw new AndrolibException("Invalid resource entry count: " + encodedEntryCount);
+        }
+        if (entriesStart < mHeader.headerSize || entriesStart > mHeader.chunkSize) {
+            throw new AndrolibException("Invalid resource entriesStart: " + entriesStart);
         }
 
-//        if (typeFlags == 1) {
-//            LOGGER.warning("Sparse type flags detected: " + mTypeSpec.getName());
-//        }
-        int[] entryOffsets = mIn.readIntArray(entryCount);
+        // A sparse type chunk stores the number of present entries here, while
+        // the preceding type-spec stores the full entry-ID range. Dense chunks
+        // use the same value for both. Keeping these counts separate is the key
+        // difference between an API-32 bundle variant and a legacy resources.arsc.
+        int totalEntryCount = typeSpec == null ? encodedEntryCount : typeSpec.getEntryCount();
+        if (totalEntryCount < 0 || totalEntryCount > 0xffff) {
+            throw new AndrolibException("Invalid resource type-spec entry count: " + totalEntryCount);
+        }
+
+        ResConfigFlags flags = readConfigFlags();
+        int offsetTableWidth = (typeFlags & TYPE_FLAG_SPARSE) != 0
+                || (typeFlags & TYPE_FLAG_OFFSET16) == 0 ? 4 : 2;
+        int offsetTableStart = mHeader.startPosition + entriesStart - encodedEntryCount * offsetTableWidth;
+
+        // For some APKs there is a disconnect between the reported size of the
+        // config and the current stream position. Preserve the existing tolerant
+        // behavior, but never silently attempt to rewind a forward-only stream.
+        skipToPosition(offsetTableStart, "resource entry offset table");
+
+        int[] entryOffsets;
+        if ((typeFlags & TYPE_FLAG_SPARSE) != 0) {
+            entryOffsets = decodeSparseEntryOffsets(
+                    mIn.readIntArray(encodedEntryCount), totalEntryCount);
+        } else if ((typeFlags & TYPE_FLAG_OFFSET16) != 0) {
+            entryOffsets = new int[encodedEntryCount];
+            for (int i = 0; i < encodedEntryCount; i++) {
+                int offset = mIn.readUnsignedShort();
+                entryOffsets[i] = offset == 0xffff ? NO_ENTRY : offset * 4;
+            }
+            totalEntryCount = encodedEntryCount;
+        } else {
+            entryOffsets = mIn.readIntArray(encodedEntryCount);
+            totalEntryCount = encodedEntryCount;
+        }
+
+        mMissingResSpecs = new boolean[totalEntryCount];
+        Arrays.fill(mMissingResSpecs, true);
 
         if (flags.isInvalid) {
             String resName = mTypeSpec.getName() + flags.getQualifiers();
@@ -441,21 +504,56 @@ public class ARSCDecoder {
         }
 
         mType = flags.isInvalid && !mKeepBroken ? null : mPkg.getOrCreateConfig(flags);
-        HashMap<Integer, EntryData> offsetsToEntryData = new HashMap<Integer, EntryData>();
+        Map<Integer, EntryData> offsetsToEntryData = new TreeMap<Integer, EntryData>();
+        int entriesStartAbsolute = mHeader.startPosition + entriesStart;
 
+        // Offsets are byte offsets from entriesStart. Sparse entries are sorted
+        // by resource ID, not necessarily by their physical offset, so collect
+        // offsets first and read them in physical order rather than assuming a
+        // dense index order. This also handles padding and shared entry offsets.
         for (int offset : entryOffsets) {
-            if (offset == -1 || offsetsToEntryData.containsKey(offset)) {
+            if (offset == NO_ENTRY) {
                 continue;
             }
-
-            offsetsToEntryData.put(offset, readEntryData());
+            if (offset < 0 || offset > mHeader.chunkSize - entriesStart) {
+                throw new AndrolibException("Resource entry offset out of bounds: " + offset);
+            }
+            if (!offsetsToEntryData.containsKey(offset)) {
+                offsetsToEntryData.put(offset, null);
+            }
+        }
+        for (Integer offset : offsetsToEntryData.keySet()) {
+            skipToPosition(entriesStartAbsolute + offset, "resource entry");
+            try {
+                offsetsToEntryData.put(offset, readEntryData());
+            } catch (AndrolibException ex) {
+                if (!mKeepBroken) {
+                    throw ex;
+                }
+                // Framework tables can contain newer entry forms that this
+                // resource model cannot represent. Do not let one malformed or
+                // unsupported entry abort the whole framework load; the caller
+                // can still use the other configurations and the parser gate
+                // will report the skipped type in diagnostics.
+                LOGGER.warning("Skipping malformed resource type 0x"
+                        + Integer.toHexString(typeId) + " at offset " + offset
+                        + ": " + ex.getMessage());
+                skipToChunkEnd();
+                return mType;
+            }
         }
 
         for (int i = 0; i < entryOffsets.length; i++) {
-            if (entryOffsets[i] != -1) {
+            if (entryOffsets[i] != NO_ENTRY) {
+                if (i >= mMissingResSpecs.length) {
+                    throw new AndrolibException("Resource entry index out of bounds: " + i);
+                }
                 mMissingResSpecs[i] = false;
                 mResId = (mResId & 0xffff0000) | i;
                 EntryData entryData = offsetsToEntryData.get(entryOffsets[i]);
+                if (entryData == null) {
+                    throw new AndrolibException("Missing resource entry at offset " + entryOffsets[i]);
+                }
                 readEntry(entryData);
             }
         }
@@ -463,18 +561,121 @@ public class ARSCDecoder {
         return mType;
     }
 
+    private static int readLittleEndianInt(byte[] data, int offset) {
+        return (data[offset] & 0xff)
+                | ((data[offset + 1] & 0xff) << 8)
+                | ((data[offset + 2] & 0xff) << 16)
+                | ((data[offset + 3] & 0xff) << 24);
+    }
+
+    /**
+     * Converts the API-32 sparse index ({@code entryId, offset / 4}) into the
+     * dense ID-indexed representation used by the existing resource model.
+     * Package-private for focused JVM tests; the method intentionally performs
+     * strict ordering/range checks so a corrupt table cannot shift subsequent
+     * entries and produce a misleading manifest.
+     */
+    static int[] decodeSparseEntryOffsets(int[] encoded, int totalEntryCount)
+            throws AndrolibException {
+        if (totalEntryCount < 0 || totalEntryCount > 0xffff) {
+            throw new AndrolibException("Invalid sparse resource entry range: " + totalEntryCount);
+        }
+        int[] offsets = new int[totalEntryCount];
+        Arrays.fill(offsets, NO_ENTRY);
+        int previousIndex = -1;
+        for (int raw : encoded) {
+            int index = raw & 0xffff;
+            int offset = (raw >>> 16) & 0xffff;
+            if (index <= previousIndex) {
+                throw new AndrolibException("Sparse resource entries are not strictly sorted");
+            }
+            if (index >= totalEntryCount) {
+                throw new AndrolibException("Sparse resource entry ID out of bounds: " + index
+                        + " (entryCount=" + totalEntryCount + ")");
+            }
+            offsets[index] = offset * 4;
+            previousIndex = index;
+        }
+        return offsets;
+    }
+
+    private void skipToPosition(int target, String what) throws IOException, AndrolibException {
+        long distance = (long) target - mCountIn.getCount();
+        if (distance < 0 || distance > Integer.MAX_VALUE) {
+            throw new AndrolibException("Cannot seek backwards to " + what + ": target=" + target
+                    + ", current=" + mCountIn.getCount());
+        }
+        if (distance != 0) {
+            int skipped = mIn.skipBytes((int) distance);
+            if (skipped != distance) {
+                throw new IOException("Truncated " + what + ": expected " + distance
+                        + " bytes, skipped " + skipped);
+            }
+        }
+    }
+
+    private long remainingChunkBytes() {
+        return (long) mHeader.endPosition - mCountIn.getCount();
+    }
+
+    private void requireChunkBytes(long bytes, String what) throws AndrolibException {
+        if (bytes < 0 || bytes > remainingChunkBytes()) {
+            throw new AndrolibException("Resource " + what + " exceeds type chunk: need "
+                    + bytes + " bytes, remaining " + remainingChunkBytes());
+        }
+    }
+
     private EntryData readEntryData() throws IOException, AndrolibException {
-        short size = mIn.readShort();
-        if (size < 0) {
-            throw new AndrolibException("Entry size is under 0 bytes.");
+        requireChunkBytes(8, "entry header");
+        int sizeOrKey = mIn.readUnsignedShort();
+        int rawFlags = mIn.readUnsignedShort();
+        int keyOrData = mIn.readInt();
+        EntryData entryData = new EntryData();
+
+        // Android 14 introduced compact entries. They are relevant here because
+        // a current AAPT2 may emit them in an APK whose variant still has an
+        // effective minSdk of 32. The compact eight-byte form stores the key in
+        // the first uint16, the value type in the high byte of flags, and the
+        // value data in the final uint32.
+        if ((rawFlags & ENTRY_FLAG_COMPACT) != 0) {
+            if ((rawFlags & ENTRY_FLAG_COMPLEX) != 0) {
+                throw new AndrolibException("Compact resource entry cannot be complex");
+            }
+            int valueType = (rawFlags >>> 8) & 0xff;
+            entryData.mFlags = (short) rawFlags;
+            entryData.mSpecNamesId = sizeOrKey;
+            entryData.mValue = readValue((byte) valueType, keyOrData);
+            return entryData;
         }
 
-        short flags = mIn.readShort();
-        int specNamesId = mIn.readInt();
-        ResValue value = (flags & ENTRY_FLAG_COMPLEX) == 0 ? readValue() : readComplexEntry();
-        EntryData entryData = new EntryData();
+        if (sizeOrKey < 8) {
+            throw new AndrolibException("Entry size is under 8 bytes: " + sizeOrKey);
+        }
+
+        short flags = (short) rawFlags;
+        ResValue value;
+        if ((flags & ENTRY_FLAG_COMPLEX) != 0) {
+            // For a map entry, size includes the parent and count fields. They
+            // must be read by readComplexEntry; skipping size - 8 here lands on
+            // the first map value and turns its Res_value header into a bogus
+            // map count (the failure seen in the real Firefox table).
+            if (sizeOrKey < 16) {
+                throw new AndrolibException("Complex resource entry header is under 16 bytes: "
+                        + sizeOrKey);
+            }
+            value = readComplexEntry(sizeOrKey);
+        } else {
+            if (sizeOrKey > 8) {
+                int extra = sizeOrKey - 8;
+                requireChunkBytes(extra, "extended entry header");
+                if (mIn.skipBytes(extra) != extra) {
+                    throw new IOException("Truncated extended resource entry");
+                }
+            }
+            value = readValue();
+        }
         entryData.mFlags = flags;
-        entryData.mSpecNamesId = specNamesId;
+        entryData.mSpecNamesId = keyOrData;
         entryData.mValue = value;
         return entryData;
     }
@@ -515,13 +716,13 @@ public class ARSCDecoder {
                 //spec = new ResResSpec(resId, mSpecNames.getString(specNamesId), mPkg, mTypeSpec);
                 spec = new ResResSpec(resId, getResName(resId.id, specNamesId), mPkg, mTypeSpec, mApkProtected);
                 mPkg.addResSpec(spec);
-                mTypeSpec.addResSpec(spec);
+                addResSpecToType(spec);
             }
         } else {
             //spec = new ResResSpec(resId, mSpecNames.getString(specNamesId), mPkg, mTypeSpec);
             spec = new ResResSpec(resId, getResName(resId.id, specNamesId), mPkg, mTypeSpec, mApkProtected);
             mPkg.addResSpec(spec);
-            mTypeSpec.addResSpec(spec);
+            addResSpecToType(spec);
         }
         ResResource res = new ResResource(mType, spec, value);
 
@@ -540,19 +741,40 @@ public class ARSCDecoder {
         mPkg.addResource(res);
     }
 
-    private ResBagValue readComplexEntry() throws IOException, AndrolibException {
+    private ResBagValue readComplexEntry(int entrySize) throws IOException, AndrolibException {
 //        int parent = mIn.readInt();
 //        int count = mIn.readInt();
+        if (entrySize < 16) {
+            throw new AndrolibException("Complex resource entry header is under 16 bytes: "
+                    + entrySize);
+        }
+        requireChunkBytes(8, "complex entry header");
         int head[] = mIn.readIntArray(2);
         int parent = head[0];
         int count = head[1];
+        if (entrySize > 16) {
+            int extra = entrySize - 16;
+            requireChunkBytes(extra, "extended complex entry header");
+            if (mIn.skipBytes(extra) != extra) {
+                throw new IOException("Truncated extended complex resource entry");
+            }
+        }
+        if (count < 0 || count > MAX_COMPLEX_ENTRY_ITEMS) {
+            throw new AndrolibException("Invalid complex resource entry count: " + count
+                    + " (parent=0x" + Integer.toHexString(parent)
+                    + ", streamOffset=" + mCountIn.getCount()
+                    + ", typeChunkStart=" + mHeader.startPosition
+                    + ", typeChunkSize=" + mHeader.chunkSize + ")");
+        }
+        long rawSize = (long) (4 + 8) * count;
+        requireChunkBytes(rawSize, "complex entry values");
 
         ResValueFactory factory = mPkg.getValueFactory();
         Duo<Integer, ResScalarValue>[] items = new Duo[count];
         ResIntBasedValue resValue;
         int resId;
 
-        byte[] raw = new byte[(4 + 8) * count];
+        byte[] raw = new byte[(int) rawSize];
         mIn.readFully(raw);
         for (int i = 0; i < count; i++) {
 //            resId = mIn.readInt();
@@ -564,7 +786,7 @@ public class ARSCDecoder {
             int data = (raw[offset + 11] & 0xff) << 24 | (raw[offset + 10] & 0xff) << 16
                     | (raw[offset + 9] & 0xff) << 8 | (raw[offset + 8] & 0xff);
             if (((raw[offset + 5] & 0xff) << 8 | (raw[offset + 4] & 0xff)) != 8) {
-                Log.d("DEBUG", "error");
+                LOGGER.fine("Resource bag value size is not 8 bytes");
             }
             resValue = readValue(type, data);
 
@@ -601,6 +823,7 @@ public class ARSCDecoder {
     }
 
     private ResIntBasedValue readValue() throws IOException, AndrolibException {
+        requireChunkBytes(8, "value");
 //      /* size */mIn.skipCheckShort((short) 8);
 //      /* zero */mIn.skipCheckByte((byte) 0);
 //        byte type = mIn.readByte();
@@ -625,6 +848,10 @@ public class ARSCDecoder {
 
         if (size < 28) {
             throw new AndrolibException("Config size < 28");
+        }
+        if ((long) size - 4 > remainingChunkBytes()) {
+            throw new AndrolibException("Config size exceeds type chunk: " + size
+                    + " bytes, remaining " + (remainingChunkBytes() + 4));
         }
 
         boolean isInvalid = false;
@@ -839,6 +1066,23 @@ public class ARSCDecoder {
         this.mMissingResSpecsDone = true;
     }
 
+    private void addResSpecToType(ResResSpec spec) throws AndrolibException {
+        try {
+            mTypeSpec.addResSpec(spec);
+        } catch (AndrolibException ex) {
+            if (!mKeepBroken) {
+                throw ex;
+            }
+            // A modern framework table can retain two entry IDs with the same
+            // source name (for example a generated alias). The package's ID map
+            // still preserves both resources, while the legacy type map can only
+            // expose one name. Keep parsing the table and report the lossy name
+            // collision instead of aborting the whole framework load.
+            LOGGER.warning("Keeping resource with duplicate type name " + spec.getName()
+                    + " at " + spec.getId());
+        }
+    }
+
     private void removeResSpec(ResResSpec spec) throws AndrolibException {
         if (mPkg.hasResSpec(spec.getId())) {
             mPkg.removeResSpec(spec);
@@ -875,8 +1119,12 @@ public class ARSCDecoder {
     private void skipToChunkEnd() throws IOException {
         while (mCountIn.getCount() < mHeader.endPosition) {
             long skipped = mCountIn.skip(mHeader.endPosition - mCountIn.getCount());
-            if (skipped <= 0 && mCountIn.read() < 0) {
-                break;
+            if (skipped > 0) {
+                continue;
+            }
+            if (mCountIn.read() < 0) {
+                throw new EOFException("Truncated resource chunk type 0x"
+                        + Integer.toHexString(mHeader.type & 0xffff));
             }
         }
     }
@@ -929,7 +1177,15 @@ public class ARSCDecoder {
             } catch (EOFException ex) {
                 return new Header(TYPE_NONE, 0, 0, countIn.getCount());
             }
-            return new Header(type, in.readShort(), in.readInt(), start);
+            int headerSize = in.readUnsignedShort();
+            int chunkSize = in.readInt();
+            if (headerSize < 8 || chunkSize < headerSize
+                    || chunkSize > Integer.MAX_VALUE - start) {
+                throw new IOException(String.format(
+                        "Invalid resource chunk header: type=0x%04x, header=%d, size=%d, start=%d",
+                        type & 0xffff, headerSize, chunkSize, start));
+            }
+            return new Header(type, headerSize, chunkSize, start);
         }
     }
 

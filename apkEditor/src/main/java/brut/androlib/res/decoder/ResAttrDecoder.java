@@ -200,22 +200,18 @@ public class ResAttrDecoder {
                         new String[]{"standard", "singleTop", "singleTask", "singleInstance",
                                 "singleInstancePerTask"});
             case ANDROID_ATTR_WINDOW_SOFT_INPUT_MODE:
-                return exact(scalar, new int[]{0, 1, 2, 3, 4, 5, 16, 32, 48},
-                        new String[]{"adjustUnspecified", "stateUnchanged", "stateHidden",
-                                "stateAlwaysHidden", "stateVisible", "stateAlwaysVisible",
-                                "adjustResize", "adjustPan", "adjustNothing"});
+                return renderWindowSoftInputMode(scalar);
             case ANDROID_ATTR_PERSISTABLE_MODE:
                 return exact(scalar, new int[]{0, 1, 2},
                         new String[]{"persistNever", "persistAcrossReboots", "persistRootOnly"});
             case ANDROID_ATTR_FOREGROUND_SERVICE_TYPE:
                 return renderFlags(scalar,
-                        new int[]{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096,
-                                8192, 16384, 32768, 65536},
+                        new int[]{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048,
+                                4096, 8192, 0x40000000},
                         new String[]{"dataSync", "mediaPlayback", "phoneCall", "location",
                                 "connectedDevice", "mediaProjection", "camera", "microphone",
-                                "remoteMessaging", "systemExempted", "shortService",
-                                "specialUse", "health", "remoteMessaging", "systemExempted",
-                                "shortService"});
+                                "health", "remoteMessaging", "systemExempted", "shortService",
+                                "fileManagement", "mediaProcessing", "specialUse"});
             default:
                 return null;
         }
@@ -437,6 +433,57 @@ public class ResAttrDecoder {
                                 "incidentReportApprover", "appPredictor", "module",
                                 "companion", "retailDemo", "recents", "role", "knownSigner"});
         }
+    }
+
+    private static String renderWindowSoftInputMode(int value) {
+        // windowSoftInputMode is composed of two independent flag groups:
+        // state (low nibble) and adjust (0x10/0x20/0x30). An exact-value lookup
+        // loses valid combinations such as 0x13, which AAPT2 expects as
+        // stateAlwaysHidden|adjustResize rather than as a numeric literal.
+        if ((value & ~(0x0f | 0xf0)) != 0) {
+            return null;
+        }
+
+        String state;
+        switch (value & 0x0f) {
+            case 0: state = null;
+                break;
+            case 1: state = "stateUnchanged";
+                break;
+            case 2: state = "stateHidden";
+                break;
+            case 3: state = "stateAlwaysHidden";
+                break;
+            case 4: state = "stateVisible";
+                break;
+            case 5: state = "stateAlwaysVisible";
+                break;
+            default: return null;
+        }
+
+        String adjust;
+        switch (value & 0xf0) {
+            case 0: adjust = null;
+                break;
+            case 0x10: adjust = "adjustResize";
+                break;
+            case 0x20: adjust = "adjustPan";
+                break;
+            case 0x30: adjust = "adjustNothing";
+                break;
+            default: return null;
+        }
+
+        if (state == null && adjust == null) {
+            return "adjustUnspecified";
+        }
+        if (state == null) {
+            return adjust;
+        }
+        if (adjust == null) {
+            return state;
+        }
+        return state + "|" + adjust;
     }
 
     private static String exact(int value, int[] values, String[] names) {

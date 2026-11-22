@@ -16,12 +16,12 @@
 
 package brut.androlib.res.decoder;
 
-import android.util.SparseArray;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
+import java.util.HashMap;
+import java.util.Map;
 
 import brut.androlib.res.xml.ResXmlEncoders;
 import brut.util.ExtDataInput;
@@ -41,9 +41,14 @@ public class StringBlock {
     private static final int CHUNK_STRINGPOOL_TYPE = 0x001C0001;
     private static final int CHUNK_NULL_TYPE = 0x00000000;
     private static final int UTF8_FLAG = 0x00000100;
+    private static final int MAX_STRING_POOL_COUNT = 1_000_000;
+    private static final int MAX_STRING_POOL_BYTES = 64 * 1024 * 1024;
     private final CharsetDecoder UTF16LE_DECODER = Charset.forName("UTF-16LE").newDecoder();
     private final CharsetDecoder UTF8_DECODER = Charset.forName("UTF-8").newDecoder();
-    private SparseArray<String> newValues = new SparseArray<>();
+    // This is only the sparse map of decoded-string replacements. A regular map
+    // keeps the decoder usable in JVM unit tests as well as on Android; the
+    // resource string pool itself remains backed by the compact offset arrays.
+    private final Map<Integer, String> newValues = new HashMap<>();
     /**
      * Returns string with style tags (html-like).
      */
@@ -71,6 +76,24 @@ public class StringBlock {
         int flags = reader.readInt();
         int stringsOffset = reader.readInt();
         int stylesOffset = reader.readInt();
+
+        if (chunkSize < 28 || chunkSize > MAX_STRING_POOL_BYTES) {
+            throw new IOException("Invalid string pool size: " + chunkSize);
+        }
+        if (stringCount < 0 || stringCount > MAX_STRING_POOL_COUNT
+                || styleCount < 0 || styleCount > MAX_STRING_POOL_COUNT) {
+            throw new IOException("Invalid string pool count: strings=" + stringCount
+                    + ", styles=" + styleCount);
+        }
+        long offsetsEnd = 28L + 4L * stringCount + 4L * styleCount;
+        if (offsetsEnd > chunkSize || stringsOffset < offsetsEnd
+                || stringsOffset > chunkSize) {
+            throw new IOException("Invalid string pool offsets: stringsStart=" + stringsOffset
+                    + ", offsetsEnd=" + offsetsEnd + ", chunkSize=" + chunkSize);
+        }
+        if (stylesOffset != 0 && (stylesOffset < stringsOffset || stylesOffset > chunkSize)) {
+            throw new IOException("Invalid string pool stylesStart: " + stylesOffset);
+        }
 
         StringBlock block = new StringBlock();
         block.m_isUTF8 = (flags & UTF8_FLAG) != 0;
