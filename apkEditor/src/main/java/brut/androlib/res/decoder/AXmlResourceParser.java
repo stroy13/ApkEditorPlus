@@ -408,16 +408,16 @@ public class AXmlResourceParser implements XmlResourceParser {
         }
 
         String value = m_strings.getString(name);
-        boolean androidAttribute = android_ns.equals(getAttributeNamespace(index));
 
         // A valid string-pool name is the primary source of truth. In particular,
-        // the framework table is optional for a protected APK and may be missing
-        // or from a different platform level. Looking up every android attribute
-        // before consulting this value used to turn a perfectly good "name" entry
-        // into an empty/synthetic entry when the framework load failed; XmlDecoder
-        // then omitted it and aapt2 reported that activity/action/etc. had no
-        // android:name.
-        if (value != null && value.length() != 0 && !androidAttribute) {
+        // a protected APK can have a framework table from a different platform
+        // level, or the protected resource parser can rename duplicate framework
+        // specs. Looking up every android attribute before consulting this value
+        // used to replace a perfectly good "name" entry with a synthetic or
+        // suffixed framework name; aapt2 then reported that activity/action/etc.
+        // had no android:name. Use the resource-map/framework name only when the
+        // binary XML genuinely has no usable string-pool name.
+        if (value != null && value.length() != 0) {
             return value;
         }
 
