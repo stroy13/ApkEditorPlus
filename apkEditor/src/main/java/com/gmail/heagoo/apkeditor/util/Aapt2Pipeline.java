@@ -70,6 +70,7 @@ public final class Aapt2Pipeline {
                     java.nio.charset.StandardCharsets.UTF_8);
             String manifestAfterRepair = repairSyntheticFrameworkAttributeNames(manifestBeforeRepair);
             manifestAfterRepair = removeEmptyAndroidAttributes(manifestAfterRepair);
+            manifestAfterRepair = removeInvalidUsesFeatureElements(manifestAfterRepair);
             if (!manifestBeforeRepair.equals(manifestAfterRepair)) {
                 if (stagedManifest == null) {
                     stagedManifest = Files.createTempFile(out.getAbsoluteFile().getParentFile().toPath(),
@@ -159,6 +160,36 @@ public final class Aapt2Pipeline {
 
     static String removeEmptyAndroidAttributes(String manifestXml) {
         return EMPTY_ANDROID_ATTRIBUTE.matcher(manifestXml).replaceAll("");
+    }
+
+    private static final Pattern USES_FEATURE_START = Pattern.compile("<uses-feature\\b([^>]*)>");
+    private static final Pattern FEATURE_IDENTITY = Pattern.compile(
+            "\\bandroid:(?:name|glEsVersion)\\s*=\\s*(['\\\"])(?!\\s*\\1)[^'\\\"]+\\1");
+    private static final Pattern EMPTY_FEATURE_ELEMENT = Pattern.compile("</?uses-feature\\b[^>]*>");
+
+    static String removeInvalidUsesFeatureElements(String manifestXml) {
+        Matcher matcher = USES_FEATURE_START.matcher(manifestXml);
+        StringBuilder result = new StringBuilder(manifestXml.length());
+        int copiedUntil = 0;
+        while (matcher.find()) {
+            String tag = matcher.group();
+            if (FEATURE_IDENTITY.matcher(matcher.group(1)).find()) continue;
+            int removeUntil;
+            if (tag.endsWith("/>")) {
+                removeUntil = matcher.end();
+            } else {
+                Matcher close = Pattern.compile("\\s*</uses-feature\\s*>").matcher(manifestXml);
+                close.region(matcher.end(), manifestXml.length());
+                if (!close.lookingAt()) continue;
+                removeUntil = close.end();
+            }
+            result.append(manifestXml, copiedUntil, matcher.start());
+            copiedUntil = removeUntil;
+            matcher.region(copiedUntil, manifestXml.length());
+        }
+        if (copiedUntil == 0) return manifestXml;
+        result.append(manifestXml, copiedUntil, manifestXml.length());
+        return result.toString();
     }
 
     static String repairSyntheticFrameworkAttributeNames(String manifestXml) {

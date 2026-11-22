@@ -30,6 +30,15 @@ public class Aapt2ManifestCompatibilityTest {
         assertTrue(fixed.contains("custom:value=\"\""));
     }
 
+    @Test public void dropsUsesFeatureWithoutRequiredIdentityAndKeepsValidFeatures() {
+        String source = "<manifest><uses-feature android:glEsVersion=\"\" android:required=\"true\"/>"
+                + "<uses-feature android:name=\"camera\" android:required=\"true\"/>"
+                + "<uses-feature android:required=\"true\"></uses-feature></manifest>";
+        String fixed = Aapt2Pipeline.removeInvalidUsesFeatureElements(
+                Aapt2Pipeline.removeEmptyAndroidAttributes(source));
+        assertEquals("<manifest><uses-feature android:name=\"camera\" android:required=\"true\"/></manifest>", fixed);
+    }
+
     @Test public void repairsKnownSyntheticFrameworkAttributeNamesWithoutTouchingUnknownIds() {
         String source = "<manifest android:attr_0x0101000b=\"owner\" "
                 + "android:attr_0x0101021b=\"42\" android:attr_0x01019999=\"keep\"/>";
