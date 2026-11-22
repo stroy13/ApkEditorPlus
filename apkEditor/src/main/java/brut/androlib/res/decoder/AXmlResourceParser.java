@@ -407,42 +407,39 @@ public class AXmlResourceParser implements XmlResourceParser {
             return "";
         }
 
-        // Pujiang modified: for protected apk, first try to get it from
-        // resource id
-        if (apkProtected) {
-            try {
-                int resId = getAttributeNameResource(index);
-                if (resId != 0) {
-                    String value = mAttrDecoder.decodeManifestAttr(resId);
-                    if (value != null) {
-                        return value;
-                    }
-                }
-            } catch (AndrolibException e) {
-            }
-        }
-
         String value = m_strings.getString(name);
+        boolean androidAttribute = android_ns.equals(getAttributeNamespace(index));
 
-        // some attributes will return "", we must rely on the resource_id and refer to the frameworks
-        // to match the resource id to the name. ex: 0x101021C = versionName
-        if (value != null && value.length() != 0 && !android_ns.equals(getAttributeNamespace(index))) {
-            return value;
-        } else {
-            int resId = getAttributeNameResource(index);
-            try {
-                value = mAttrDecoder.decodeManifestAttr(resId);
-            } catch (AndrolibException e) {
-            }
-            if (value == null) {
-                // The framework resource table could not be loaded, so the attribute
-                // name is unknown. Returning null used to crash the XML serializer
-                // ("Could not decode AndroidManifest.xml"), a synthetic name lets the
-                // rest of the APK open normally.
-                value = resId != 0 ? String.format("attr_0x%08x", resId) : "";
-            }
+        // A valid string-pool name is the primary source of truth. In particular,
+        // the framework table is optional for a protected APK and may be missing
+        // or from a different platform level. Looking up every android attribute
+        // before consulting this value used to turn a perfectly good "name" entry
+        // into an empty/synthetic entry when the framework load failed; XmlDecoder
+        // then omitted it and aapt2 reported that activity/action/etc. had no
+        // android:name.
+        if (value != null && value.length() != 0 && !androidAttribute) {
             return value;
         }
+
+        int resId = getAttributeNameResource(index);
+        String frameworkName = null;
+        if (mAttrDecoder != null) {
+            try {
+                frameworkName = mAttrDecoder.decodeManifestAttr(resId);
+            } catch (AndrolibException e) {
+                setFirstError(e);
+            }
+        }
+        if (frameworkName != null && frameworkName.length() != 0) {
+            return frameworkName;
+        }
+        if (value != null && value.length() != 0) {
+            return value;
+        }
+        // The framework resource table could not be loaded and the string pool
+        // did not contain a usable name. Keep a stable name so XML serialization
+        // can continue without a null attribute name.
+        return resId != 0 ? String.format("attr_0x%08x", resId) : "";
     }
 
     @Override
