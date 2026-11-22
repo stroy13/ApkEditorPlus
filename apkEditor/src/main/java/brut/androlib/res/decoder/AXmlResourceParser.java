@@ -417,6 +417,10 @@ public class AXmlResourceParser implements XmlResourceParser {
                 int resId = getAttributeNameResource(index);
                 if (resId != 0) {
                     String value = mAttrDecoder.decodeManifestAttr(resId);
+                    if (value == null && AndroidManifestAttributeNames.isFrameworkAttribute(resId)) {
+                        String pooledName = m_strings.getString(name);
+                        if (AndroidManifestAttributeNames.isValidAttributeName(pooledName)) value = pooledName;
+                    }
                     if (value == null) value = AndroidManifestAttributeNames.nameFor(resId);
                     if (value != null) {
                         return value;
@@ -437,6 +441,10 @@ public class AXmlResourceParser implements XmlResourceParser {
             try {
                 value = mAttrDecoder.decodeManifestAttr(resId);
             } catch (AndrolibException e) {
+            }
+            if (value == null && AndroidManifestAttributeNames.isFrameworkAttribute(resId)) {
+                String pooledName = m_strings.getString(name);
+                if (AndroidManifestAttributeNames.isValidAttributeName(pooledName)) value = pooledName;
             }
             if (value == null) value = AndroidManifestAttributeNames.nameFor(resId);
             if (value == null) {

@@ -24,4 +24,17 @@ final class AndroidManifestAttributeNames {
     static boolean isFrameworkAttribute(int resourceId) {
         return (resourceId & 0xff000000) == 0x01000000;
     }
+
+    static boolean isValidAttributeName(String name) {
+        if (name == null || name.isEmpty() || !isNameStart(name.charAt(0))) return false;
+        for (int i = 1; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (!isNameStart(c) && !(c >= '0' && c <= '9') && c != '-' && c != '.') return false;
+        }
+        return true;
+    }
+
+    private static boolean isNameStart(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+    }
 }

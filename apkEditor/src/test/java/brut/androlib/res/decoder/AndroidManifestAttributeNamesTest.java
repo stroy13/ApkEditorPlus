@@ -14,5 +14,8 @@ public class AndroidManifestAttributeNamesTest {
         assertTrue(AndroidManifestAttributeNames.isFrameworkAttribute(0x01010003));
         assertFalse(AndroidManifestAttributeNames.isFrameworkAttribute(0x7f010003));
         assertEquals(null, AndroidManifestAttributeNames.nameFor(0x01019999));
+        assertTrue(AndroidManifestAttributeNames.isValidAttributeName("compileSdkVersion"));
+        assertFalse(AndroidManifestAttributeNames.isValidAttributeName("attr_0x01010003"));
+        assertFalse(AndroidManifestAttributeNames.isValidAttributeName("bad name"));
     }
 }
