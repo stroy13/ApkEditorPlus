@@ -27,7 +27,6 @@ import brut.androlib.res.data.value.ResBoolValue;
 import brut.androlib.res.data.value.ResIntValue;
 import brut.androlib.res.data.value.ResReferenceValue;
 import brut.androlib.res.data.value.ResScalarValue;
-import brut.androlib.res.data.value.ResValue;
 
 /**
  * @author Ryszard Wiśniewski <brut.alll@gmail.com>
@@ -141,15 +140,11 @@ public class ResAttrDecoder {
     private String decodeKnownValue(int type, int value, String rawValue, int attrResId,
                                     ResScalarValue resValue) throws AndrolibException {
         if (isReferenceType(type)) {
-            if (isBooleanAttribute(attrResId)) {
-                String bool = decodeReferencedBoolean(value);
-                if (bool != null) {
-                    return bool;
-                }
-            }
+            // Keep a bool resource as a typed symbolic reference. A manifest
+            // boolean may legally use @bool/name, and resolving it to the default
+            // true/false value would discard qualifier-dependent behavior.
             return formatReference(value, type == TypedValue.TYPE_ATTRIBUTE
                     || type == 0x08);
-        }
 
         // Some protected writers incorrectly keep a numeric @id in the raw string
         // slot while marking the value as a string. Recover it only for attributes
@@ -231,10 +226,6 @@ public class ResAttrDecoder {
             return ((ResBoolValue) resValue).getValue() ? "true" : "false";
         }
         if (resValue instanceof ResReferenceValue) {
-            String bool = decodeReferencedBoolean(value);
-            if (bool != null) {
-                return bool;
-            }
             return null;
         }
         if (rawValue != null) {
@@ -242,42 +233,15 @@ public class ResAttrDecoder {
             if ("true".equalsIgnoreCase(text) || "false".equalsIgnoreCase(text)) {
                 return text.toLowerCase();
             }
+            // Leave symbolic/numeric references for decodeKnownValue to format
+            // through the selected package, preserving a bool resource reference.
             if (text.startsWith("@") || text.startsWith("?")) {
-                Integer referencedId = parseReferenceId(text);
-                if (referencedId != null) {
-                    String referencedBoolean = decodeReferencedBoolean(referencedId);
-                    if (referencedBoolean != null) {
-                        return referencedBoolean;
-                    }
-                }
+                return null;
             }
         }
         if (type == TypedValue.TYPE_INT_BOOLEAN
                 || (type >= TypedValue.TYPE_FIRST_INT && type <= TypedValue.TYPE_LAST_INT)) {
             return value == 0 ? "false" : "true";
-        }
-        return null;
-    }
-
-    private String decodeReferencedBoolean(int id) throws AndrolibException {
-        if (id == 0) {
-            return null;
-        }
-        try {
-            ResResSpec spec = findReferenceSpec(id);
-            if (spec == null || !spec.hasDefaultResource()) {
-                return null;
-            }
-            ResValue value = spec.getDefaultResource().getValue();
-            if (value instanceof ResBoolValue) {
-                return ((ResBoolValue) value).getValue() ? "true" : "false";
-            }
-            if (value instanceof ResIntValue && "bool".equalsIgnoreCase(
-                    ((ResIntValue) value).getType())) {
-                return ((ResIntValue) value).getValue() == 0 ? "false" : "true";
-            }
-        } catch (Exception ignored) {
-            // Keep the original typed reference when the bool resource is absent.
         }
         return null;
     }

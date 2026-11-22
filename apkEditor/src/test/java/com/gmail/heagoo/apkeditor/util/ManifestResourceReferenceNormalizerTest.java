@@ -27,9 +27,6 @@ public class ManifestResourceReferenceNormalizerTest {
                         + "<public type=\"bool\" name=\"back_enabled\" id=\"0x7f050005\" />\n"
                         + "<public type=\"xml\" name=\"data_rules\" id=\"0x7f170008\" />\n"
                         + "</resources>\n").getBytes(StandardCharsets.UTF_8));
-        Files.write(new File(values, "bools.xml").toPath(), (
-                "<resources><bool name=\"back_enabled\">true</bool></resources>\n")
-                .getBytes(StandardCharsets.UTF_8));
         File manifest = folder.newFile("AndroidManifest.xml");
         Files.write(manifest.toPath(), (
                 "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">"
@@ -44,7 +41,7 @@ public class ManifestResourceReferenceNormalizerTest {
         assertTrue(normalized.contains("android:icon=\"@drawable/noname_0x7f100000\""));
         assertTrue(normalized.contains("android:roundIcon=\"@drawable/noname_0x7f100000\""));
         assertTrue(normalized.contains("android:theme=\"@style/noname_0x7f1501d5\""));
-        assertTrue(normalized.contains("android:enableOnBackInvokedCallback=\"true\""));
+        assertTrue(normalized.contains("android:enableOnBackInvokedCallback=\"@bool/back_enabled\""));
         assertTrue(normalized.contains("android:dataExtractionRules=\"@xml/data_rules\""));
     }
 

@@ -7,9 +7,7 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -21,27 +19,10 @@ import java.util.regex.Pattern;
  */
 public final class ManifestResourceReferenceNormalizer {
     private static final Pattern PUBLIC_TAG = Pattern.compile("<public\\b([^>]*)>", Pattern.DOTALL);
-    private static final Pattern VALUE_TAG = Pattern.compile(
-            "<(bool|item)\\b([^>]*)>(.*?)</\\1\\s*>", Pattern.DOTALL);
     private static final Pattern ATTRIBUTE = Pattern.compile(
             "\\b([a-zA-Z][a-zA-Z0-9_]*)\\s*=\\s*\"([^\"]*)\"");
     private static final Pattern REFERENCE = Pattern.compile(
             "([@?])(?:0[xX]([0-9a-fA-F]{1,8})(?![0-9a-fA-F])|([0-9]{1,10})(?![0-9]))");
-    private static final Set<String> BOOLEAN_ATTRIBUTES = new HashSet<>();
-
-    static {
-        String[] names = {
-                "allowBackup", "allowClearUserData", "autoRemoveFromRecents", "autoVerify",
-                "debuggable", "directBootAware", "enableOnBackInvokedCallback", "enabled",
-                "excludeFromRecents", "exported", "extractNativeLibs", "fullBackupOnly",
-                "grantUriPermissions", "hasCode", "isolatedProcess", "killAfterRestore",
-                "largeHeap", "noHistory", "persistent", "relinquishTaskIdentity",
-                "required", "restoreAnyVersion", "resizeableActivity", "stateNotNeeded",
-                "stopWithTask", "supportsMultipleDisplays", "supportsPictureInPicture",
-                "supportsRtl", "useAppZygote", "usesCleartextTraffic"
-        };
-        for (String name : names) BOOLEAN_ATTRIBUTES.add(name);
-    }
 
     private ManifestResourceReferenceNormalizer() {
     }
@@ -56,18 +37,15 @@ public final class ManifestResourceReferenceNormalizer {
             return false;
         }
         Map<Integer, ResourceRef> byId = new HashMap<>();
-        Map<String, Integer> byName = new HashMap<>();
-        readPublicFiles(resRoot, byId, byName);
+        readPublicFiles(resRoot, byId);
         if (byId.isEmpty()) {
             log(logger, "Manifest reference normalization: public.xml entries=0");
             return false;
         }
-        Map<Integer, String> booleanValues = readBooleanValues(resRoot, byName);
         String original = new String(Files.readAllBytes(manifest.toPath()), StandardCharsets.UTF_8);
         Matcher matcher = REFERENCE.matcher(original);
         StringBuffer normalized = new StringBuffer(original.length());
         int converted = 0;
-        int booleanConverted = 0;
         int unresolved = 0;
         while (matcher.find()) {
             int id;
@@ -88,14 +66,10 @@ public final class ManifestResourceReferenceNormalizer {
             ResourceRef ref = byId.get(id);
             String replacement = null;
             if (ref != null && isUsableName(ref.type) && isUsableName(ref.name)) {
-                String bool = booleanValues.get(id);
-                if (bool != null && matcher.group(1).equals("@")
-                        && isBooleanAttribute(original, matcher.start())) {
-                    replacement = bool;
-                    booleanConverted++;
-                } else {
-                    replacement = matcher.group(1) + ref.type + "/" + ref.name;
-                }
+                // Keep even bool references symbolic. A @bool/name manifest value
+                // is type-checked by AAPT2 and retains resource qualifiers; using
+                // the default true/false value would silently change behavior.
+                replacement = matcher.group(1) + ref.type + "/" + ref.name;
             }
             if (replacement == null) {
                 replacement = matcher.group();
@@ -107,8 +81,7 @@ public final class ManifestResourceReferenceNormalizer {
         }
         matcher.appendTail(normalized);
         log(logger, "Manifest reference normalization: public.xml entries=" + byId.size()
-                + "; converted=" + converted + "; boolean=" + booleanConverted
-                + "; unresolved=" + unresolved);
+                + "; converted=" + converted + "; unresolved=" + unresolved);
         String result = normalized.toString();
         if (result.equals(original)) {
             return false;
@@ -128,8 +101,8 @@ public final class ManifestResourceReferenceNormalizer {
         return true;
     }
 
-    private static void readPublicFiles(File resRoot, Map<Integer, ResourceRef> byId,
-                                        Map<String, Integer> byName) throws IOException {
+    private static void readPublicFiles(File resRoot, Map<Integer, ResourceRef> byId)
+            throws IOException {
         File[] dirs = resRoot.listFiles();
         if (dirs == null) throw new IOException("Cannot list resources: " + resRoot);
         for (File dir : dirs) {
@@ -149,44 +122,11 @@ public final class ManifestResourceReferenceNormalizer {
                     int id = (int) Long.parseLong(stripHex(idText), 16);
                     ResourceRef ref = new ResourceRef(type, name);
                     byId.put(id, ref);
-                    byName.put(type + "/" + name, id);
                 } catch (NumberFormatException ignored) {
                     // Ignore one malformed public entry and retain the rest.
                 }
             }
         }
-    }
-
-    private static Map<Integer, String> readBooleanValues(File resRoot,
-                                                            Map<String, Integer> byName)
-            throws IOException {
-        Map<Integer, String> values = new HashMap<>();
-        File[] dirs = resRoot.listFiles();
-        if (dirs == null) return values;
-        for (File dir : dirs) {
-            if (!dir.isDirectory() || !(dir.getName().equals("values")
-                    || dir.getName().startsWith("values-"))) continue;
-            File[] files = dir.listFiles();
-            if (files == null) continue;
-            for (File file : files) {
-                if (!file.isFile() || !file.getName().endsWith(".xml")
-                        || file.length() > 16L * 1024 * 1024) continue;
-                String xml = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
-                Matcher tags = VALUE_TAG.matcher(xml);
-                while (tags.find()) {
-                    String tag = tags.group(1);
-                    Map<String, String> attrs = attributes(tags.group(2));
-                    String type = "bool".equals(tag) ? "bool" : attrs.get("type");
-                    String name = attrs.get("name");
-                    String value = tags.group(3).trim();
-                    if (!"bool".equals(type) || name == null
-                            || !(value.equals("true") || value.equals("false"))) continue;
-                    Integer id = byName.get("bool/" + name);
-                    if (id != null) values.put(id, value);
-                }
-            }
-        }
-        return values;
     }
 
     private static Map<String, String> attributes(String text) {
@@ -204,19 +144,6 @@ public final class ManifestResourceReferenceNormalizer {
     private static boolean isUsableName(String value) {
         return value != null && value.matches("[a-zA-Z0-9_.]+")
                 && !value.equals(".") && !value.equals("..");
-    }
-
-    private static boolean isBooleanAttribute(String manifest, int referenceStart) {
-        int tagStart = manifest.lastIndexOf('<', referenceStart);
-        int tagEnd = manifest.indexOf('>', referenceStart);
-        if (tagStart < 0 || tagEnd < 0) return false;
-        String prefix = manifest.substring(tagStart, referenceStart);
-        for (String name : BOOLEAN_ATTRIBUTES) {
-            if (prefix.matches("(?s).*\\b" + Pattern.quote(name) + "\\s*=\\s*\"$")) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static void log(ApkBuildPipeline.Logger logger, String message) {
