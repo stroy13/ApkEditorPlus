@@ -161,7 +161,7 @@ public class ARSCDecoderSparseTest {
         config.putInt(28);
         config.put(new byte[24]);
         config.putInt(0); // dense entry offset
-        config.putShort((short) 8);
+        config.putShort((short) 16); // ResTable_map_entry includes parent/count
         config.putShort((short) 1); // FLAG_COMPLEX
         config.putInt(0); // key index
         config.putInt(0); // parent

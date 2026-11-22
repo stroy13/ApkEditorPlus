@@ -638,6 +638,9 @@ public class ARSCDecoder {
         // the first uint16, the value type in the high byte of flags, and the
         // value data in the final uint32.
         if ((rawFlags & ENTRY_FLAG_COMPACT) != 0) {
+            if ((rawFlags & ENTRY_FLAG_COMPLEX) != 0) {
+                throw new AndrolibException("Compact resource entry cannot be complex");
+            }
             int valueType = (rawFlags >>> 8) & 0xff;
             entryData.mFlags = (short) rawFlags;
             entryData.mSpecNamesId = sizeOrKey;
@@ -648,16 +651,29 @@ public class ARSCDecoder {
         if (sizeOrKey < 8) {
             throw new AndrolibException("Entry size is under 8 bytes: " + sizeOrKey);
         }
-        if (sizeOrKey > 8) {
-            int extra = sizeOrKey - 8;
-            requireChunkBytes(extra, "extended entry header");
-            if (mIn.skipBytes(extra) != extra) {
-                throw new IOException("Truncated extended resource entry");
-            }
-        }
 
         short flags = (short) rawFlags;
-        ResValue value = (flags & ENTRY_FLAG_COMPLEX) == 0 ? readValue() : readComplexEntry();
+        ResValue value;
+        if ((flags & ENTRY_FLAG_COMPLEX) != 0) {
+            // For a map entry, size includes the parent and count fields. They
+            // must be read by readComplexEntry; skipping size - 8 here lands on
+            // the first map value and turns its Res_value header into a bogus
+            // map count (the failure seen in the real Firefox table).
+            if (sizeOrKey < 16) {
+                throw new AndrolibException("Complex resource entry header is under 16 bytes: "
+                        + sizeOrKey);
+            }
+            value = readComplexEntry(sizeOrKey);
+        } else {
+            if (sizeOrKey > 8) {
+                int extra = sizeOrKey - 8;
+                requireChunkBytes(extra, "extended entry header");
+                if (mIn.skipBytes(extra) != extra) {
+                    throw new IOException("Truncated extended resource entry");
+                }
+            }
+            value = readValue();
+        }
         entryData.mFlags = flags;
         entryData.mSpecNamesId = keyOrData;
         entryData.mValue = value;
@@ -725,13 +741,24 @@ public class ARSCDecoder {
         mPkg.addResource(res);
     }
 
-    private ResBagValue readComplexEntry() throws IOException, AndrolibException {
+    private ResBagValue readComplexEntry(int entrySize) throws IOException, AndrolibException {
 //        int parent = mIn.readInt();
 //        int count = mIn.readInt();
+        if (entrySize < 16) {
+            throw new AndrolibException("Complex resource entry header is under 16 bytes: "
+                    + entrySize);
+        }
         requireChunkBytes(8, "complex entry header");
         int head[] = mIn.readIntArray(2);
         int parent = head[0];
         int count = head[1];
+        if (entrySize > 16) {
+            int extra = entrySize - 16;
+            requireChunkBytes(extra, "extended complex entry header");
+            if (mIn.skipBytes(extra) != extra) {
+                throw new IOException("Truncated extended complex resource entry");
+            }
+        }
         if (count < 0 || count > MAX_COMPLEX_ENTRY_ITEMS) {
             throw new AndrolibException("Invalid complex resource entry count: " + count
                     + " (parent=0x" + Integer.toHexString(parent)
