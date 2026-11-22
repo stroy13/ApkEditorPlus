@@ -18,6 +18,7 @@ import com.gmail.heagoo.apkeditor.util.MissingResourceAttributes;
 import com.gmail.heagoo.apkeditor.util.BundledFrameworkFiles;
 import com.gmail.heagoo.apkeditor.util.SignHelper;
 import com.gmail.heagoo.apkeditor.util.ComposeBuildTrace;
+import com.gmail.heagoo.apkeditor.util.ManifestResourceReferenceNormalizer;
 import com.gmail.heagoo.apkeditor.util.ToolFramework;
 import com.gmail.heagoo.apkeditor.util.ZipEngine;
 import com.gmail.heagoo.common.CommandRunner;
@@ -693,6 +694,10 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
         this.tempApkPath = this.targetApkPath + ".in";
         logPersistedStringDiagnostics();
         try {
+            ManifestResourceReferenceNormalizer.normalize(
+                    new File(this.decodedFilePath + "/AndroidManifest.xml"),
+                    new File(this.decodedFilePath + "/res"),
+                    this.buildTrace == null ? null : this.buildTrace.logger());
             String selectedFramework = ToolFramework.selected(this.ctx, this.androidJarPath);
             String aaptChoice = PreferenceManager.getDefaultSharedPreferences(this.ctx).getString("AaptVersion", "legacy");
             boolean wantsAapt2 = "aapt2".equals(aaptChoice) || "aapt2-37".equals(aaptChoice);
