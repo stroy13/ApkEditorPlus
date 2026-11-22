@@ -190,7 +190,12 @@ public final class SignHelper {
             ManifestInfo manifest = readManifest(apk);
             String splitDiagnostic = splitArchiveDiagnostic(manifest);
             if (splitDiagnostic != null) throw new IOException(splitDiagnostic + ": " + apk);
-            throw new IOException("Android package parser cannot read generated APK: " + apk);
+            String details = ManifestParser.describe(manifest);
+            if (out != null) {
+                out.log("Android package parser rejected generated APK; parsed output manifest: " + details);
+            }
+            throw new IOException("Android package parser cannot read generated APK; manifest="
+                    + details + "; signature and ZIP structure passed, but Android installability is unverified: " + apk);
         }
         if (out != null) {
             long versionCode = android.os.Build.VERSION.SDK_INT >= 28
