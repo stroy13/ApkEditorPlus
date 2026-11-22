@@ -139,12 +139,112 @@ public final class ApkStructureValidator {
                 if (chunkHeader < 288 || chunkSize < chunkHeader) {
                     throw new IOException("Invalid ResTable_package header at " + pos);
                 }
+                validatePackageChunks(b, pos, chunkSize, chunkHeader);
             }
             pos += chunkSize;
         }
         if (!sawStringPool) throw new IOException("resources.arsc has no global string pool");
         if (packages != packageCount) throw new IOException("resources.arsc package count mismatch: header="
                 + packageCount + ", found=" + packages);
+    }
+
+    /**
+     * Validates the offset-index portion of package type chunks. Bundletool's
+     * SDK-32 optimization changes this table from one dense uint32 offset per
+     * possible entry to sorted pairs of uint16 entry ID and uint16 offset/4.
+     * A shallow top-level ARSC check would accept either encoding and leave the
+     * decoder to interpret the sparse pairs as huge byte offsets.
+     */
+    private static void validatePackageChunks(ByteBuffer b, int packagePos, int packageSize,
+                                              int packageHeader) throws IOException {
+        int pos = packagePos + packageHeader;
+        int end = packagePos + packageSize;
+        while (pos < end) {
+            if (pos + 8 > end) throw new IOException("Truncated ARSC package chunk at " + pos);
+            int type = b.getShort(pos) & 0xffff;
+            int header = b.getShort(pos + 2) & 0xffff;
+            int size = b.getInt(pos + 4);
+            if (header < 8 || size < header || pos + size > end) {
+                throw new IOException("Invalid ARSC package chunk at " + pos + ": type=0x"
+                        + Integer.toHexString(type) + ", header=" + header + ", size=" + size);
+            }
+            if (type == 0x0202) {
+                validateTypeSpecChunk(b, pos, size, header);
+            } else if (type == 0x0201) {
+                validateTypeChunk(b, pos, size, header);
+            }
+            pos += size;
+        }
+        if (pos != end) throw new IOException("ARSC package chunks do not end at package boundary");
+    }
+
+    private static void validateTypeSpecChunk(ByteBuffer b, int pos, int size, int header)
+            throws IOException {
+        if (header < 16 || size < header) {
+            throw new IOException("Invalid ResTable_typeSpec header at " + pos);
+        }
+        long entryCount = b.getInt(pos + 12) & 0xffffffffL;
+        if (entryCount > 0xffff) {
+            throw new IOException("ResTable_typeSpec has too many entries: " + entryCount);
+        }
+        long flagsEnd = (long) header + entryCount * 4L;
+        if (flagsEnd > size) {
+            throw new IOException("ResTable_typeSpec flags overrun chunk at " + pos);
+        }
+    }
+
+    private static void validateTypeChunk(ByteBuffer b, int pos, int size, int header)
+            throws IOException {
+        if (header < 20 || size < header) {
+            throw new IOException("Invalid ResTable_type header at " + pos);
+        }
+        long entryCount = b.getInt(pos + 12) & 0xffffffffL;
+        if (entryCount > 0xffff) {
+            throw new IOException("ResTable_type has too many entries: " + entryCount);
+        }
+        int flags = b.get(pos + 9) & 0xff;
+        long entriesStart = b.getInt(pos + 16) & 0xffffffffL;
+        if (entriesStart < header || entriesStart > size) {
+            throw new IOException("Invalid ResTable_type entriesStart at " + pos + ": "
+                    + entriesStart);
+        }
+        long offsetWidth = (flags & 0x01) != 0 ? 4L : ((flags & 0x02) != 0 ? 2L : 4L);
+        long offsetsEnd = header + entryCount * offsetWidth;
+        if (offsetsEnd > entriesStart) {
+            throw new IOException("ResTable_type offset table overlaps entries at " + pos);
+        }
+
+        int offsetPos = pos + header;
+        long dataEnd = size - entriesStart;
+        if ((flags & 0x01) != 0) {
+            int previousIndex = -1;
+            for (int i = 0; i < (int) entryCount; i++) {
+                int raw = b.getInt(offsetPos + i * 4);
+                int index = raw & 0xffff;
+                int offset = (raw >>> 16) & 0xffff;
+                if (index <= previousIndex) {
+                    throw new IOException("Sparse ResTable_type entries are not sorted at " + pos);
+                }
+                if ((long) offset * 4L + 8L > dataEnd) {
+                    throw new IOException("Sparse ResTable_type entry offset overruns chunk at " + pos);
+                }
+                previousIndex = index;
+            }
+        } else if ((flags & 0x02) != 0) {
+            for (int i = 0; i < (int) entryCount; i++) {
+                int offset = b.getShort(offsetPos + i * 2) & 0xffff;
+                if (offset != 0xffff && (long) offset * 4L + 8L > dataEnd) {
+                    throw new IOException("16-bit ResTable_type entry offset overruns chunk at " + pos);
+                }
+            }
+        } else {
+            for (int i = 0; i < (int) entryCount; i++) {
+                long offset = b.getInt(offsetPos + i * 4) & 0xffffffffL;
+                if (offset != 0xffffffffL && offset + 8L > dataEnd) {
+                    throw new IOException("ResTable_type entry offset overruns chunk at " + pos);
+                }
+            }
+        }
     }
 
     public static void validateDex(byte[] data) throws IOException {

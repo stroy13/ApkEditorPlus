@@ -30,6 +30,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.logging.Logger;
 
 import brut.androlib.AndrolibException;
@@ -63,6 +65,12 @@ public class ARSCDecoder {
     private final static short ENTRY_FLAG_COMPLEX = 0x0001;
     private final static short ENTRY_FLAG_PUBLIC = 0x0002;
     private final static short ENTRY_FLAG_WEAK = 0x0004;
+    private final static short ENTRY_FLAG_COMPACT = 0x0008;
+    // ResTable_type flags. Bundletool enables sparse encoding for APK variants
+    // whose effective minSdk is 32 (Android 12L/S_V2).
+    private static final int TYPE_FLAG_SPARSE = 0x01;
+    private static final int TYPE_FLAG_OFFSET16 = 0x02;
+    private static final int NO_ENTRY = -1;
     private static final Logger LOGGER = Logger.getLogger(ARSCDecoder.class.getName());
     private static final int KNOWN_CONFIG_BYTES = 56;
     private final ExtDataInput mIn;
@@ -343,10 +351,6 @@ public class ARSCDecoder {
             resTypeSpec = readSingleTableTypeSpec();
             addTypeSpec(resTypeSpec);
             type = nextChunk().type;
-
-            if (!mResTable.getSparseResources()) {
-                mResTable.setSparseResources(true);
-            }
         }
 
         // Nearly all time consumed here
@@ -375,6 +379,9 @@ public class ARSCDecoder {
         int id = mIn.readUnsignedByte();
         mIn.skipBytes(3);
         int entryCount = mIn.readInt();
+        if (entryCount < 0 || entryCount > 0xffff) {
+            throw new AndrolibException("Invalid resource type-spec entry count: " + entryCount);
+        }
 
         if (mFlagsOffsets != null) {
             mFlagsOffsets.add(new FlagsOffset(mCountIn.getCount(), entryCount));
@@ -390,46 +397,75 @@ public class ARSCDecoder {
 
     private ResType readTableType() throws IOException, AndrolibException {
         checkChunkType(Header.TYPE_TYPE);
-        //byte typeId = mIn.readByte();
+        // ResTable_type fields after the common chunk header:
+        // id (u8), flags (u8), reserved (u16), entryCount (u32),
+        // entriesStart (u32). The configuration follows these fields.
         mIn.readFully(perfBuf);
         int typeId = perfBuf[0] & 0xff;
-        if (mResTypeSpecs.containsKey(typeId)) {
-            mResId = (0xff000000 & mResId) | mResTypeSpecs.get(typeId).getId() << 16;
-            mTypeSpec = mResTypeSpecs.get(typeId);
+        int typeFlags = perfBuf[1] & 0xff;
+        ResTypeSpec typeSpec = mResTypeSpecs.get(typeId);
+        if (typeSpec != null) {
+            mResId = (0xff000000 & mResId) | typeSpec.getId() << 16;
+            mTypeSpec = typeSpec;
         }
-        //   int typeFlags = mIn.readByte();
-        // Added by Pujiang
+        if ((typeFlags & (TYPE_FLAG_SPARSE | TYPE_FLAG_OFFSET16)) != 0) {
+            // Keep the fact that the input used a compact type-entry index. This
+            // is diagnostic state today, and also prevents later writers from
+            // accidentally treating the table as an ordinary dense table.
+            mResTable.setSparseResources(true);
+        }
         if (typeId < mIsFileValues.length) {
             mIsFileValue = this.mIsFileValues[typeId - 1];
         } else {
             mIsFileValue = false;
         }
 
-        // /* res0, res1 */mIn.skipBytes(3);
-        // int entryCount = mIn.readInt();
-        // int entriesStart = mIn.readInt();
-        int entryCount = (perfBuf[7] & 0xff) << 24 | (perfBuf[6] & 0xff) << 16
-                | (perfBuf[5] & 0xff) << 8 | (perfBuf[4] & 0xff);
-        int entriesStart = (perfBuf[11] & 0xff) << 24 | (perfBuf[10] & 0xff) << 16
-                | (perfBuf[9] & 0xff) << 8 | (perfBuf[8] & 0xff);
-        //Log.d("DEBUG", "\ttypeId=" + typeId + ", entryCount=" + entryCount);
-
-        mMissingResSpecs = new boolean[entryCount];
-        Arrays.fill(mMissingResSpecs, true);
-
-        ResConfigFlags flags = readConfigFlags();
-        int position = (mHeader.startPosition + entriesStart) - (entryCount * 4);
-
-        // For some APKs there is a disconnect between the reported size of Configs
-        // If we find a mismatch skip those bytes.
-        if (position != mCountIn.getCount()) {
-            mIn.skipBytes(position - mCountIn.getCount());
+        int encodedEntryCount = readLittleEndianInt(perfBuf, 4);
+        int entriesStart = readLittleEndianInt(perfBuf, 8);
+        if (encodedEntryCount < 0 || encodedEntryCount > 0xffff) {
+            throw new AndrolibException("Invalid resource entry count: " + encodedEntryCount);
+        }
+        if (entriesStart < mHeader.headerSize || entriesStart > mHeader.chunkSize) {
+            throw new AndrolibException("Invalid resource entriesStart: " + entriesStart);
         }
 
-//        if (typeFlags == 1) {
-//            LOGGER.warning("Sparse type flags detected: " + mTypeSpec.getName());
-//        }
-        int[] entryOffsets = mIn.readIntArray(entryCount);
+        // A sparse type chunk stores the number of present entries here, while
+        // the preceding type-spec stores the full entry-ID range. Dense chunks
+        // use the same value for both. Keeping these counts separate is the key
+        // difference between an API-32 bundle variant and a legacy resources.arsc.
+        int totalEntryCount = typeSpec == null ? encodedEntryCount : typeSpec.getEntryCount();
+        if (totalEntryCount < 0 || totalEntryCount > 0xffff) {
+            throw new AndrolibException("Invalid resource type-spec entry count: " + totalEntryCount);
+        }
+
+        ResConfigFlags flags = readConfigFlags();
+        int offsetTableWidth = (typeFlags & TYPE_FLAG_SPARSE) != 0
+                || (typeFlags & TYPE_FLAG_OFFSET16) == 0 ? 4 : 2;
+        int offsetTableStart = mHeader.startPosition + entriesStart - encodedEntryCount * offsetTableWidth;
+
+        // For some APKs there is a disconnect between the reported size of the
+        // config and the current stream position. Preserve the existing tolerant
+        // behavior, but never silently attempt to rewind a forward-only stream.
+        skipToPosition(offsetTableStart, "resource entry offset table");
+
+        int[] entryOffsets;
+        if ((typeFlags & TYPE_FLAG_SPARSE) != 0) {
+            entryOffsets = decodeSparseEntryOffsets(
+                    mIn.readIntArray(encodedEntryCount), totalEntryCount);
+        } else if ((typeFlags & TYPE_FLAG_OFFSET16) != 0) {
+            entryOffsets = new int[encodedEntryCount];
+            for (int i = 0; i < encodedEntryCount; i++) {
+                int offset = mIn.readUnsignedShort();
+                entryOffsets[i] = offset == 0xffff ? NO_ENTRY : offset * 4;
+            }
+            totalEntryCount = encodedEntryCount;
+        } else {
+            entryOffsets = mIn.readIntArray(encodedEntryCount);
+            totalEntryCount = encodedEntryCount;
+        }
+
+        mMissingResSpecs = new boolean[totalEntryCount];
+        Arrays.fill(mMissingResSpecs, true);
 
         if (flags.isInvalid) {
             String resName = mTypeSpec.getName() + flags.getQualifiers();
@@ -441,21 +477,40 @@ public class ARSCDecoder {
         }
 
         mType = flags.isInvalid && !mKeepBroken ? null : mPkg.getOrCreateConfig(flags);
-        HashMap<Integer, EntryData> offsetsToEntryData = new HashMap<Integer, EntryData>();
+        Map<Integer, EntryData> offsetsToEntryData = new TreeMap<Integer, EntryData>();
+        int entriesStartAbsolute = mHeader.startPosition + entriesStart;
 
+        // Offsets are byte offsets from entriesStart. Sparse entries are sorted
+        // by resource ID, not necessarily by their physical offset, so collect
+        // offsets first and read them in physical order rather than assuming a
+        // dense index order. This also handles padding and shared entry offsets.
         for (int offset : entryOffsets) {
-            if (offset == -1 || offsetsToEntryData.containsKey(offset)) {
+            if (offset == NO_ENTRY) {
                 continue;
             }
-
+            if (offset < 0 || offset > mHeader.chunkSize - entriesStart) {
+                throw new AndrolibException("Resource entry offset out of bounds: " + offset);
+            }
+            if (!offsetsToEntryData.containsKey(offset)) {
+                offsetsToEntryData.put(offset, null);
+            }
+        }
+        for (Integer offset : offsetsToEntryData.keySet()) {
+            skipToPosition(entriesStartAbsolute + offset, "resource entry");
             offsetsToEntryData.put(offset, readEntryData());
         }
 
         for (int i = 0; i < entryOffsets.length; i++) {
-            if (entryOffsets[i] != -1) {
+            if (entryOffsets[i] != NO_ENTRY) {
+                if (i >= mMissingResSpecs.length) {
+                    throw new AndrolibException("Resource entry index out of bounds: " + i);
+                }
                 mMissingResSpecs[i] = false;
                 mResId = (mResId & 0xffff0000) | i;
                 EntryData entryData = offsetsToEntryData.get(entryOffsets[i]);
+                if (entryData == null) {
+                    throw new AndrolibException("Missing resource entry at offset " + entryOffsets[i]);
+                }
                 readEntry(entryData);
             }
         }
@@ -463,18 +518,92 @@ public class ARSCDecoder {
         return mType;
     }
 
+    private static int readLittleEndianInt(byte[] data, int offset) {
+        return (data[offset] & 0xff)
+                | ((data[offset + 1] & 0xff) << 8)
+                | ((data[offset + 2] & 0xff) << 16)
+                | ((data[offset + 3] & 0xff) << 24);
+    }
+
+    /**
+     * Converts the API-32 sparse index ({@code entryId, offset / 4}) into the
+     * dense ID-indexed representation used by the existing resource model.
+     * Package-private for focused JVM tests; the method intentionally performs
+     * strict ordering/range checks so a corrupt table cannot shift subsequent
+     * entries and produce a misleading manifest.
+     */
+    static int[] decodeSparseEntryOffsets(int[] encoded, int totalEntryCount)
+            throws AndrolibException {
+        if (totalEntryCount < 0 || totalEntryCount > 0xffff) {
+            throw new AndrolibException("Invalid sparse resource entry range: " + totalEntryCount);
+        }
+        int[] offsets = new int[totalEntryCount];
+        Arrays.fill(offsets, NO_ENTRY);
+        int previousIndex = -1;
+        for (int raw : encoded) {
+            int index = raw & 0xffff;
+            int offset = (raw >>> 16) & 0xffff;
+            if (index <= previousIndex) {
+                throw new AndrolibException("Sparse resource entries are not strictly sorted");
+            }
+            if (index >= totalEntryCount) {
+                throw new AndrolibException("Sparse resource entry ID out of bounds: " + index
+                        + " (entryCount=" + totalEntryCount + ")");
+            }
+            offsets[index] = offset * 4;
+            previousIndex = index;
+        }
+        return offsets;
+    }
+
+    private void skipToPosition(int target, String what) throws IOException, AndrolibException {
+        long distance = (long) target - mCountIn.getCount();
+        if (distance < 0 || distance > Integer.MAX_VALUE) {
+            throw new AndrolibException("Cannot seek backwards to " + what + ": target=" + target
+                    + ", current=" + mCountIn.getCount());
+        }
+        if (distance != 0) {
+            int skipped = mIn.skipBytes((int) distance);
+            if (skipped != distance) {
+                throw new IOException("Truncated " + what + ": expected " + distance
+                        + " bytes, skipped " + skipped);
+            }
+        }
+    }
+
     private EntryData readEntryData() throws IOException, AndrolibException {
-        short size = mIn.readShort();
-        if (size < 0) {
-            throw new AndrolibException("Entry size is under 0 bytes.");
+        int sizeOrKey = mIn.readUnsignedShort();
+        int rawFlags = mIn.readUnsignedShort();
+        int keyOrData = mIn.readInt();
+        EntryData entryData = new EntryData();
+
+        // Android 14 introduced compact entries. They are relevant here because
+        // a current AAPT2 may emit them in an APK whose variant still has an
+        // effective minSdk of 32. The compact eight-byte form stores the key in
+        // the first uint16, the value type in the high byte of flags, and the
+        // value data in the final uint32.
+        if ((rawFlags & ENTRY_FLAG_COMPACT) != 0) {
+            int valueType = (rawFlags >>> 8) & 0xff;
+            entryData.mFlags = (short) rawFlags;
+            entryData.mSpecNamesId = sizeOrKey;
+            entryData.mValue = readValue((byte) valueType, keyOrData);
+            return entryData;
         }
 
-        short flags = mIn.readShort();
-        int specNamesId = mIn.readInt();
+        if (sizeOrKey < 8) {
+            throw new AndrolibException("Entry size is under 8 bytes: " + sizeOrKey);
+        }
+        if (sizeOrKey > 8) {
+            int extra = sizeOrKey - 8;
+            if (mIn.skipBytes(extra) != extra) {
+                throw new IOException("Truncated extended resource entry");
+            }
+        }
+
+        short flags = (short) rawFlags;
         ResValue value = (flags & ENTRY_FLAG_COMPLEX) == 0 ? readValue() : readComplexEntry();
-        EntryData entryData = new EntryData();
         entryData.mFlags = flags;
-        entryData.mSpecNamesId = specNamesId;
+        entryData.mSpecNamesId = keyOrData;
         entryData.mValue = value;
         return entryData;
     }

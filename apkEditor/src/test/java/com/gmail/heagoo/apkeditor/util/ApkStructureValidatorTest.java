@@ -73,10 +73,82 @@ public class ApkStructureValidatorTest {
         return table;
     }
 
+    private static byte[] arscWithTypeChunk(int typeFlags, int[] encodedOffsets, int dataBytes) {
+        int offsetWidth = (typeFlags & 0x01) != 0 ? 4 : ((typeFlags & 0x02) != 0 ? 2 : 4);
+        int typeHeader = 20;
+        int entriesStart = typeHeader + encodedOffsets.length * offsetWidth;
+        int typeSize = entriesStart + dataBytes;
+        byte[] type = new byte[typeSize];
+        ByteBuffer t = ByteBuffer.wrap(type).order(ByteOrder.LITTLE_ENDIAN);
+        t.putShort((short) 0x0201);
+        t.putShort((short) typeHeader);
+        t.putInt(typeSize);
+        t.put((byte) 1);                 // type id
+        t.put((byte) typeFlags);         // FLAG_SPARSE or FLAG_OFFSET16
+        t.putShort((short) 0);            // reserved
+        t.putInt(encodedOffsets.length);
+        t.putInt(entriesStart);
+        for (int value : encodedOffsets) {
+            if ((typeFlags & 0x02) != 0 && (typeFlags & 0x01) == 0) {
+                t.putShort((short) value);
+            } else {
+                t.putInt(value);
+            }
+        }
+
+        byte[] pkg = new byte[288 + type.length];
+        ByteBuffer p = ByteBuffer.wrap(pkg).order(ByteOrder.LITTLE_ENDIAN);
+        p.putShort((short) 0x0200);
+        p.putShort((short) 288);
+        p.putInt(pkg.length);
+        p.putInt(0x7f);
+        System.arraycopy(type, 0, pkg, 288, type.length);
+
+        byte[] pool = stringPool(new String[0], true);
+        byte[] table = new byte[12 + pool.length + pkg.length];
+        ByteBuffer result = ByteBuffer.wrap(table).order(ByteOrder.LITTLE_ENDIAN);
+        result.putShort((short) 0x0002);
+        result.putShort((short) 12);
+        result.putInt(table.length);
+        result.putInt(1);
+        result.put(pool);
+        result.put(pkg);
+        return table;
+    }
+
     @Test
     public void acceptsValidUtf8AndUtf16ResourceTables() throws Exception {
         ApkStructureValidator.validateResources(arsc(new String[]{"label", "com.test.app"}, true));
         ApkStructureValidator.validateResources(arsc(new String[]{"label", "com.test.app"}, false));
+    }
+
+    @Test
+    public void acceptsSparseSdk32TypeIndex() throws Exception {
+        int[] sparseEntries = {
+                (0 << 16) | 1,
+                (2 << 16) | 4
+        };
+        ApkStructureValidator.validateResources(arscWithTypeChunk(0x01, sparseEntries, 16));
+    }
+
+    @Test
+    public void rejectsUnsortedSparseSdk32TypeIndex() {
+        int[] sparseEntries = {
+                (0 << 16) | 4,
+                (2 << 16) | 1
+        };
+        try {
+            ApkStructureValidator.validateResources(arscWithTypeChunk(0x01, sparseEntries, 16));
+            fail("Expected unsorted sparse index error");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage().contains("not sorted"));
+        }
+    }
+
+    @Test
+    public void acceptsOffset16TypeIndex() throws Exception {
+        ApkStructureValidator.validateResources(arscWithTypeChunk(0x02,
+                new int[]{0, 0xffff}, 8));
     }
 
     @Test
