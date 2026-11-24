@@ -58,9 +58,12 @@ public class ARSCDecoderRealApkIntegrationTest {
             ResPackage package_ = decoded.getOnePackage();
             assertTrue("real Firefox resource table decoded no resource specs",
                     package_.getResSpecCount() > 0);
+            assertTrue("real Firefox resource table decoded no values files",
+                    package_.listValuesFiles().size() > 0);
             System.out.println("Real Firefox resources.arsc: " + bytes.length
                     + " bytes, packages=" + decoded.getPackages().length
                     + ", specs=" + package_.getResSpecCount()
+                    + ", valuesFiles=" + package_.listValuesFiles().size()
                     + ", sparse=" + table.getSparseResources());
         }
     }
