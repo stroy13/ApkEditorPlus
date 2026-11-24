@@ -111,10 +111,12 @@ public class ComposePipelineTest {
     @Test
     public void fullComposeCollectsEveryDecodedPayloadAreaWithoutAmbiguousOverwrite() throws Exception {
         String full = read("ApkComposeThreadNew.java");
-        for (String area : new String[]{"assets/", "lib/", "libs/", "kotlin/", "unknown/"}) {
-            assertTrue("full compose must collect " + area, full.contains("collectFiles(filesToAdd, "
-                    + area.replace("/", "Dir") + ", \"" + area + "\");")
-                    || full.contains("\"" + area + "\""));
+        for (String[] area : new String[][]{
+                {"assetsDir", "assets/"}, {"libDir", "lib/"}, {"libsDir", "libs/"},
+                {"kotlinDir", "kotlin/"}, {"unknownDir", ""}}) {
+            assertTrue("full compose must collect " + area[0],
+                    full.contains("collectFiles(filesToAdd, " + area[0] + ", \""
+                            + area[1] + "\");"));
         }
         assertTrue(full.contains("collectDexFiles(filesToAdd);"));
         assertTrue(full.contains("Ambiguous decoded APK entry"));
