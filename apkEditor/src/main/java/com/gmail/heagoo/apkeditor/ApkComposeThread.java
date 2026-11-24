@@ -943,14 +943,21 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
                     }
                     String aapt2 = new File(this.ctx.getApplicationInfo().nativeLibraryDir, newest ? "libaapt2_37.so" : "libaapt2_exec.so").getAbsolutePath();
                     Aapt2Pipeline.build(aapt2, selectedFramework, this.decodedFilePath + "/res", this.decodedFilePath + "/AndroidManifest.xml", this.tempApkPath, this.buildTrace == null ? null : this.buildTrace.logger());
+                    ApkBuildPipeline.validateResourceArchive(new File(this.tempApkPath));
                     return true;
                 } catch (Exception e) {
                     // A renamed type that only ever held values has no directory
-                    // to spot, so the compiler is the one that finds it. Fall
-                    // back to the original AAPT rather than fail the build.
-                    if (!Aapt2ResourceTypes.isUnknownTypeFailure(e.getMessage())) {
+                    // to spot, and AAPT2 can emit an empty ARSC when the decoded
+                    // project has no usable resource package. Fall back to the
+                    // original AAPT rather than fail the build.
+                    if (!Aapt2ResourceTypes.isUnknownTypeFailure(e.getMessage())
+                            && !Aapt2ResourceTypes.isEmptyResourceTableFailure(e.getMessage())) {
                         this.errMessage = e.getMessage();
                         return false;
+                    }
+                    File failedOutput = new File(this.tempApkPath);
+                    if (failedOutput.exists()) {
+                        failedOutput.delete();
                     }
                     warnAapt2Fallback(null);
                 }

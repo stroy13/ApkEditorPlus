@@ -198,6 +198,22 @@ public final class Aapt2ResourceTypes {
                 || lower.contains("invalid resource type");
     }
 
+    /**
+     * AAPT2 can emit a syntactically valid but empty resource table when the
+     * decoded project contains no usable resource package. The legacy AAPT has a
+     * compatibility path for this case, so retry it instead of publishing or
+     * reporting the empty ARSC as the final build error.
+     */
+    public static boolean isEmptyResourceTableFailure(String message) {
+        if (message == null) {
+            return false;
+        }
+        String lower = message.toLowerCase(Locale.ROOT);
+        return lower.contains("resources.arsc has no packages")
+                || lower.contains("resources.arsc has no global string pool")
+                || lower.contains("resources.arsc package count mismatch");
+    }
+
     /** A short, human-readable list for the build log, e.g. {@code ac, be}. */
     public static String describe(Set<String> types) {
         if (types == null || types.isEmpty()) {
