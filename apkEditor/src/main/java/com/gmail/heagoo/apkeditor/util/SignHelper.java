@@ -300,8 +300,12 @@ public final class SignHelper {
      * archive rather than a component-metadata problem.
      */
     private static String assetManagerDiagnostic(File apk) {
-        AssetManager assets = new AssetManager();
+        AssetManager assets = null;
         try {
+            // AssetManager's constructor is hidden on modern SDKs. Reflection keeps
+            // this optional diagnostic from mutating Context.getAssets() and avoids
+            // taking a compile-time dependency on the hidden constructor.
+            assets = AssetManager.class.getDeclaredConstructor().newInstance();
             int cookie = assets.addAssetPath(apk.getAbsolutePath());
             if (cookie == 0) {
                 return "addAssetPath returned 0";
@@ -321,10 +325,12 @@ public final class SignHelper {
         } catch (Throwable error) {
             return "AssetManager failed: " + throwableSummary(error);
         } finally {
-            try {
-                assets.close();
-            } catch (Throwable ignored) {
-                // Diagnostic cleanup must not hide the original parse result.
+            if (assets != null) {
+                try {
+                    assets.close();
+                } catch (Throwable ignored) {
+                    // Diagnostic cleanup must not hide the original parse result.
+                }
             }
         }
     }
