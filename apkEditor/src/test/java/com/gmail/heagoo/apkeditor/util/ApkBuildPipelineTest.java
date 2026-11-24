@@ -386,6 +386,7 @@ public class ApkBuildPipelineTest {
         assertTrue(text.contains("Stage: sign"));
         assertTrue(text.contains("Stage: verify"));
         assertTrue(text.contains("Stage: publish"));
+        assertTrue(text.contains("merge AndroidManifest.xml: sourceMethod=DEFLATED, outputMethod=STORED"));
         assertTrue(text.contains("structure OK: AndroidManifest.xml"));
         assertTrue(text.contains("signed structure OK: resources.arsc"));
         assertTrue(text.contains("build() succeeded"));

@@ -89,7 +89,7 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
         if (!buildDir.exists()) {
             buildDir.mkdir();
         }
-        this.buildTrace = new ComposeBuildTrace(new File(this.targetApkPath), "full");
+        this.buildTrace = new ComposeBuildTrace(new File(this.targetApkPath), "full", this.ctx);
         try {
             this.buildTrace.begin("resource change scan");
             boolean rebuildResource = this.manifestModified || needRebuildResource();

@@ -128,6 +128,9 @@ public class ComposePipelineTest {
         assertTrue("identity-only retry must distinguish metadata generation from archive parsing",
                 signHelper.contains("retrying with identity-only flags")
                         && signHelper.contains("getPackageArchiveInfo(apk.getAbsolutePath(), 0)"));
+        assertTrue("a parser rejection must include native asset and legacy-parser diagnostics",
+                signHelper.contains("assetManagerDiagnostic(apk)")
+                        && signHelper.contains("legacyPackageParserDiagnostic(apk)"));
         String legacy = runBody(read("ApkComposeThread.java"));
         assertTrue(legacy.contains("if (!signApk()) {"));
         assertTrue("unsigned builds still have to write the apk",

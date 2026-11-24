@@ -2,6 +2,8 @@ package com.gmail.heagoo.apkeditor.util;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.res.AssetManager;
+import android.content.res.XmlResourceParser;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.preference.PreferenceManager;
@@ -64,7 +66,7 @@ public final class SignHelper {
                 File target = new File(targetApkPath);
                 File parent = target.getAbsoluteFile().getParentFile();
                 if (parent != null) {
-                    ownLog = new BuildLog(new File(parent, "build-log.txt"));
+                    ownLog = new BuildLog(new File(parent, "build-log.txt"), BuildLog.languageFor(ctx));
                     out = ownLog;
                 }
             } catch (IOException ignored) {
@@ -219,11 +221,16 @@ public final class SignHelper {
             String splitDiagnostic = splitArchiveDiagnostic(manifest);
             if (splitDiagnostic != null) throw new IOException(splitDiagnostic + ": " + apk);
             String details = ManifestParser.describe(manifest);
+            String assetDiagnostic = assetManagerDiagnostic(apk);
+            String legacyDiagnostic = legacyPackageParserDiagnostic(apk);
             if (out != null) {
                 out.log("Android package parser rejected generated APK; parsed output manifest: " + details);
+                out.log("Framework parser diagnostics: " + legacyDiagnostic
+                        + "; asset manager: " + assetDiagnostic);
             }
             throw new IOException("Android package parser cannot read generated APK; manifest="
-                    + details + "; signature and ZIP structure passed, but Android installability is unverified: " + apk);
+                    + details + "; framework=" + legacyDiagnostic + "; assets=" + assetDiagnostic
+                    + "; signature and ZIP structure passed, but Android installability is unverified: " + apk);
         }
         if (expected != null && expected.packageName != null
                 && !expected.packageName.equals(info.packageName)) {
@@ -284,6 +291,87 @@ public final class SignHelper {
                 }
             }
         }
+    }
+
+    /**
+     * Probe the same native asset path that PackageParser uses. This is deliberately
+     * diagnostic only: a successful probe does not replace PackageManager's final
+     * identity check, but a failure usually identifies a bad resources.arsc/AXML
+     * archive rather than a component-metadata problem.
+     */
+    private static String assetManagerDiagnostic(File apk) {
+        AssetManager assets = new AssetManager();
+        try {
+            int cookie = assets.addAssetPath(apk.getAbsolutePath());
+            if (cookie == 0) {
+                return "addAssetPath returned 0";
+            }
+            XmlResourceParser parser = null;
+            try {
+                parser = assets.openXmlResourceParser(cookie, "AndroidManifest.xml");
+                while (parser.next() != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                    // Consume the parser so malformed later chunks are not hidden.
+                }
+                return "AssetManager opened AndroidManifest.xml";
+            } finally {
+                if (parser != null) {
+                    parser.close();
+                }
+            }
+        } catch (Throwable error) {
+            return "AssetManager failed: " + throwableSummary(error);
+        } finally {
+            try {
+                assets.close();
+            } catch (Throwable ignored) {
+                // Diagnostic cleanup must not hide the original parse result.
+            }
+        }
+    }
+
+    /**
+     * Older Android releases expose the legacy parser as a hidden class. When it is
+     * reflectively accessible, its PackageParserException contains the actual parse
+     * error that getPackageArchiveInfo intentionally discards. Hidden-API blocking is
+     * reported as a diagnostic string and is otherwise harmless.
+     */
+    private static String legacyPackageParserDiagnostic(File apk) {
+        try {
+            Class<?> parserClass = Class.forName("android.content.pm.PackageParser");
+            Object parser = parserClass.getDeclaredConstructor().newInstance();
+            java.lang.reflect.Method parse;
+            Object result;
+            try {
+                parse = parserClass.getMethod("parsePackage", File.class, int.class, boolean.class);
+                result = parse.invoke(parser, apk, 0, false);
+            } catch (NoSuchMethodException missingModernMethod) {
+                parse = parserClass.getMethod("parseMonolithicPackage", File.class, int.class);
+                result = parse.invoke(parser, apk, 0);
+            }
+            return result == null ? "legacy parser returned null" : "legacy parser accepted archive";
+        } catch (java.lang.reflect.InvocationTargetException error) {
+            Throwable cause = error.getCause() == null ? error : error.getCause();
+            return "legacy parser rejected: " + throwableSummary(cause);
+        } catch (Throwable error) {
+            return "legacy parser unavailable: " + throwableSummary(error);
+        }
+    }
+
+    private static String throwableSummary(Throwable error) {
+        if (error == null) {
+            return "unknown error";
+        }
+        String message = error.getMessage();
+        String text = error.getClass().getSimpleName()
+                + (message == null || message.isEmpty() ? "" : ": " + message);
+        try {
+            java.lang.reflect.Field field = error.getClass().getField("error");
+            Object code = field.get(error);
+            text += " (code=" + code + ")";
+        } catch (Throwable ignored) {
+            // Most failures do not expose a numeric package-parser code.
+        }
+        return text;
     }
 
     private static boolean hasPackageIdentity(PackageInfo info) {

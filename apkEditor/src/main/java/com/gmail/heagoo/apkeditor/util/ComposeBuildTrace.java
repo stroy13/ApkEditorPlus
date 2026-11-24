@@ -1,5 +1,7 @@
 package com.gmail.heagoo.apkeditor.util;
 
+import android.content.Context;
+
 import java.io.File;
 import java.io.IOException;
 
@@ -10,10 +12,16 @@ public final class ComposeBuildTrace implements AutoCloseable {
     private long started;
 
     public ComposeBuildTrace(File target, String mode) {
+        this(target, mode, null);
+    }
+
+    public ComposeBuildTrace(File target, String mode, Context context) {
         BuildLog output = null;
         try {
             File parent = target.getAbsoluteFile().getParentFile();
-            if (parent != null) output = new BuildLog(new File(parent, "build-log.txt"));
+            if (parent != null) {
+                output = new BuildLog(new File(parent, "build-log.txt"), BuildLog.languageFor(context));
+            }
         } catch (IOException | SecurityException ignored) { }
         log = output;
         if (log != null) log.log("Full compose mode: " + mode + "; target=" + target);

@@ -418,8 +418,13 @@ public final class ApkBuildPipeline {
                     if (replacementFile != null) {
                         validateReplacement(name, replacementFile, logSink);
                     }
+                    boolean stored = shouldStore(name, options.targetSdkVersion,
+                            options.extractNativeLibs != 1, entry);
                     log(logSink, "merge " + name + ": sourceMethod="
                             + (entry.getMethod() == ZipEntry.STORED ? "STORED" : "DEFLATED")
+                            + ", outputMethod=" + (stored ? "STORED" : "DEFLATED")
+                            + ", aligned=" + (stored ? (name.toLowerCase(Locale.ROOT).startsWith("lib/")
+                            && name.endsWith(".so") ? "16384" : "4") : "none")
                             + ", size=" + size
                             + (replacementFile != null ? ", replacement=" + replacementFile : ""));
                     try (InputStream input = replacementFile != null
@@ -464,9 +469,7 @@ public final class ApkBuildPipeline {
                                    byte[] buffer, int targetSdkVersion, boolean directNative) throws IOException {
         // Preserve compression only when extraction is explicitly enabled. In all
         // other cases the installer may require direct, uncompressed native libraries.
-        boolean stored = (sourceEntry != null && sourceEntry.getMethod() == ZipEntry.STORED)
-                || mustStore(name, targetSdkVersion)
-                || (directNative && NativeLibraryZipVerifier.isNativeLibrary(name));
+        boolean stored = shouldStore(name, targetSdkVersion, directNative, sourceEntry);
         ZipEntry entry = new ZipEntry(name);
         if (stored) {
             entry.setMethod(ZipEntry.STORED);
@@ -550,6 +553,13 @@ public final class ApkBuildPipeline {
             throw new IOException("Truncated entry " + name + ": expected " + expected
                     + " bytes, got " + total);
         }
+    }
+
+    private static boolean shouldStore(String name, int targetSdkVersion,
+                                       boolean directNative, ZipEntry sourceEntry) {
+        return (sourceEntry != null && sourceEntry.getMethod() == ZipEntry.STORED)
+                || mustStore(name, targetSdkVersion)
+                || (directNative && NativeLibraryZipVerifier.isNativeLibrary(name));
     }
 
     private static boolean mustStore(String name, int targetSdkVersion) {
@@ -668,7 +678,9 @@ public final class ApkBuildPipeline {
                 } else {
                     ApkStructureValidator.validateDex(data);
                 }
-                log(out, "signed structure OK: " + entry.getName() + " (" + data.length + " bytes)");
+                log(out, "signed structure OK: " + entry.getName() + " (" + data.length
+                        + " bytes, method="
+                        + (entry.getMethod() == ZipEntry.STORED ? "STORED" : "DEFLATED") + ")");
             }
         }
         log(out, "Signed APK structure verified");

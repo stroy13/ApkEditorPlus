@@ -2,14 +2,16 @@ package com.gmail.heagoo.apkeditor.util;
 
 import java.util.Locale;
 
-/** Presentation only: preserve raw file, paths and external tool diagnostics. */
+/** Shared rendering for the live log view and the optional localized log file. */
 public final class BuildLogDisplay {
     private static final String[][] RU = {
-        {"Full compose mode: ", "Режим сборки: "},
+        {"=== APK Editor Plus build log ===", "=== Журнал сборки APK Editor Plus ==="},
+        {"Full compose mode: ", "Режим полной сборки: "},
         {"Compose stage start: ", "Начало этапа: "},
         {"Compose stage end: ", "Завершён этап: "},
         {"Compose result: ", "Результат сборки: "},
         {"Resource tool preparation: ", "Подготовка инструментов: "},
+        {"Manifest reference normalization: ", "Нормализация ссылок манифеста: "},
         {"Resource compose total: ", "Компоновка ресурсов: "},
         {"AAPT2 values scan: ", "AAPT2: проверка values: "},
         {"AAPT2 synthetic name scan: ", "AAPT2: поиск имён ресурсов: "},
@@ -20,17 +22,62 @@ public final class BuildLogDisplay {
         {"AAPT2 synthetic drawable names restored in resource table: ", "AAPT2: имена ресурсов восстановлены: "},
         {"AAPT2 compile: ", "AAPT2: компиляция: "},
         {"AAPT2 link: ", "AAPT2: компоновка: "},
+        {"AAPT2 manifest: ", "AAPT2: манифест: "},
         {"DEX change check: ", "Проверка изменений DEX: "},
         {"Smali assembler: ", "Компилятор smali: "},
         {"Merge file collection and mapping: ", "Подготовка файлов для объединения: "},
         {"Merge ZIP engine: ", "Объединение ZIP: "},
+        {"Merge Java ZIP pipeline: ", "Конвейер Java ZIP: "},
+        {"Signature schemes preference: ", "Схемы подписи: "},
         {"Signing key preference: ", "Ключ подписи: "},
         {"Source manifest: ", "Исходный манифест: "},
         {"Effective replacement manifest: ", "Манифест для замены: "},
         {"Output manifest: ", "Итоговый манифест: "},
         {"Signing options: ", "Параметры подписи: "},
+        {"Replacements: ", "Замены: "},
+        {"Replacement files validated", "Файлы замен проверены"},
+        {"Certificate subject: ", "Субъект сертификата: "},
+        {"Temp unsigned: ", "Временный неподписанный APK: "},
+        {"Temp signed: ", "Временный подписанный APK: "},
+        {"Merged size: ", "Размер объединённого APK: "},
+        {"Signed size: ", "Размер подписанного APK: "},
+        {"Native library ZIP policy verified: ", "Проверка политики ZIP для native-библиотек: "},
+        {"Android package parser returned no component-rich PackageInfo; retrying with identity-only flags", "Парсер Android не вернул PackageInfo с компонентами; повторная проверка только идентичности"},
+        {"Android package parser identity-only retry succeeded", "Повторная проверка идентичности через парсер Android успешна"},
+        {"Android package parser rejected generated APK; parsed output manifest: ", "Парсер Android отклонил собранный APK; разобранный итоговый манифест: "},
+        {"Android package parser rejected the generated APK; preserving signed output for diagnosis: ", "Парсер Android отклонил собранный APK; подписанный файл сохранён для диагностики: "},
+        {"Framework parser diagnostics: ", "Диагностика системного парсера: "},
+        {"Android package parser cannot read generated APK; ", "Системный парсер Android не может прочитать собранный APK; "},
+        {"SignHelper failed: ", "Ошибка SignHelper: "},
+        {"apksig sign: ", "apksig: подпись: "},
+        {"apksig sign finished: ", "apksig: подпись завершена: "},
+        {"apksig verify: ", "apksig: проверка: "},
+        {"AAPT2 resource archive validated: ", "AAPT2: архив ресурсов проверен: "},
+        {"AAPT2 manifest: restored synthetic Android attribute names", "AAPT2: восстановлены синтетические имена атрибутов Android в манифесте"},
+        {"Merge entries: ", "Элементы объединения: "},
+        {"Unsigned APK assembled and validated: ", "Неподписанный APK собран и проверен: "},
+        {"Signed APK structure verified", "Структура подписанного APK проверена"},
+        {"ERROR: ", "ОШИБКА: "}, {"Caused by: ", "Причина: "},
+        {"--- Environment ---", "--- Окружение ---"},
+        {"--- Image replacements ---", "--- Замены изображений ---"},
+        {"--- Prepare interfaces ---", "--- Подготовка интерфейсов ---"},
+        {"--- DEX class renames ---", "--- Переименование классов DEX ---"},
+        {"--- Output ---", "--- Результат ---"}, {"--- Result ---", "--- Итог ---"},
+        {"--- Failure ---", "--- Ошибка ---"},
+        {"App package: ", "Пакет приложения: "}, {"Android SDK: ", "Android SDK: "},
+        {"Device: ", "Устройство: "}, {"Source APK: ", "Исходный APK: "},
+        {"Source APK size: ", "Размер исходного APK: "}, {"Package name: ", "Имя пакета: "},
+        {"Working dir: ", "Рабочая папка: "}, {"Old app name (ARSC): ", "Старое имя приложения (ARSC): "},
+        {"New app name (ARSC): ", "Новое имя приложения (ARSC): "},
+        {"New package name (ARSC): ", "Новое имя пакета (ARSC): "},
+        {"Class renames: ", "Переименования классов: "}, {"Extra interfaces: ", "Дополнительные интерфейсы: "},
+        {"Image replacement count: ", "Количество замен изображений: "},
+        {"signed structure OK: ", "Структура подписанного APK проверена: "},
+        {"structure OK: ", "Структура проверена: "},
         {"AAPT: undeclared app attributes ", "AAPT: найдены необъявленные атрибуты приложения "},
         {"AAPT: older manifest validator rejected modern elements; retrying with validation warnings. Original error: ", "AAPT: повторяем проверку с совместимыми предупреждениями манифеста. Исходная ошибка: "},
+        {"SignHelper: source=", "SignHelper: источник="},
+        {"build() started", "Сборка начата"},
         {"SignHelper finished successfully", "Подпись APK успешно завершена"},
         {"Android package parser OK: ", "Проверка APK пройдена: "},
         {"Output rejected by Android package parser; removing unusable APK: ", "APK отклонён системой Android и будет удалён: "},
@@ -39,8 +86,7 @@ public final class BuildLogDisplay {
         {"Source: ", "Источник: "}, {"Target: ", "Результат: "},
         {"Stage: merge", "Этап: объединение"}, {"Stage: sign", "Этап: подпись"},
         {"Stage: verify", "Этап: проверка"}, {"Stage: publish", "Этап: сохранение"},
-        {"merge ", "Добавление в APK: "}, {"skip ", "Пропуск: "},
-        {"Signed APK structure verified", "Структура подписанного APK проверена"},
+        {"merge ", "Добавление в APK: "}, {"add ", "Добавление в APK: "}, {"skip ", "Пропуск: "},
         {"build() succeeded", "Сборка успешно завершена"},
         {"build() failed: ", "Ошибка сборки: "},
         {"Finished: ", "Завершено: "}, {"Started: ", "Начало: "},
@@ -65,8 +111,22 @@ public final class BuildLogDisplay {
                 rest = localizePublishedTarget(rest);
             } else if (pair[0].equals("Android package parser OK: ")) {
                 rest = localizePackageSummary(rest);
+            } else if (pair[0].equals("Framework parser diagnostics: ")) {
+                rest = rest.replace("legacy parser rejected:", "старый парсер отклонил:")
+                        .replace("legacy parser unavailable:", "старый парсер недоступен:")
+                        .replace("legacy parser accepted archive", "старый парсер принял архив")
+                        .replace("legacy parser returned null", "старый парсер вернул null")
+                        .replace("AssetManager failed:", "ошибка AssetManager:")
+                        .replace("AssetManager opened AndroidManifest.xml", "AssetManager открыл AndroidManifest.xml")
+                        .replace("addAssetPath returned 0", "addAssetPath вернул 0");
             } else if (pair[0].equals("AAPT: undeclared app attributes ")) {
                 rest = rest.replace("; retrying with temporary declarations", "; повторяем сборку с временными объявлениями атрибутов");
+            } else if (pair[0].equals("merge ") || pair[0].equals("add ")) {
+                rest = rest.replace("sourceMethod=", "метод источника=")
+                        .replace("outputMethod=", "метод результата=")
+                        .replace("aligned=", "выравнивание=")
+                        .replace("size=", "размер=")
+                        .replace("replacement=", "замена=");
             }
             return prefix + pair[1] + rest;
         }
@@ -133,8 +193,13 @@ public final class BuildLogDisplay {
         String[][] fields = {
                 {"package=", "пакет="}, {"versionCode=", "код версии="}, {"versionName=", "версия="},
                 {"minSdk=", "мин. SDK="}, {"targetSdk=", "целевой SDK="}, {"application=", "приложение="},
-                {"components={", "компоненты={"}, {"activities=", "действия="}, {"services=", "службы="},
-                {"receivers=", "получатели="}, {"providers=", "провайдеры="}, {"permissions=", "разрешения="}
+                {"metadataMode=", "режим метаданных="}, {"components={", "компоненты={"},
+                {"activities=", "действия="}, {"services=", "службы="},
+                {"receivers=", "получатели="}, {"providers=", "провайдеры="}, {"permissions=", "разрешения="},
+                {"splitName=", "имя split="}, {"configForSplit=", "конфигурация split="},
+                {"isFeatureSplit=", "feature split="}, {"isSplitRequired=", "требуется split="},
+                {"requiredSplitTypes=", "требуемые типы split="}, {"splitTypes=", "типы split="},
+                {"extractNativeLibs=", "извлечение native-библиотек="}, {"useEmbeddedDex=", "встроенный DEX="}
         };
         for (String[] field : fields) value = value.replace(field[0], field[1]);
         return value;

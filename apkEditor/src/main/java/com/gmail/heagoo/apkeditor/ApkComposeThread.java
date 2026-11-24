@@ -293,7 +293,7 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
 
     @Override // java.lang.Thread, java.lang.Runnable
     public void run() {
-        this.buildTrace = new ComposeBuildTrace(new File(this.targetApkPath), "standard");
+        this.buildTrace = new ComposeBuildTrace(new File(this.targetApkPath), "standard", this.ctx);
         try {
             this.buildTrace.begin("plan build");
             boolean rebuildResNeeded = isResourceModified();
