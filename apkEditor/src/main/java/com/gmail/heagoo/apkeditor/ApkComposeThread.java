@@ -947,11 +947,10 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
                     return true;
                 } catch (Exception e) {
                     // A renamed type that only ever held values has no directory
-                    // to spot, and AAPT2 can emit an empty ARSC when the decoded
-                    // project has no usable resource package. Fall back to the
-                    // original AAPT rather than fail the build.
-                    if (!Aapt2ResourceTypes.isUnknownTypeFailure(e.getMessage())
-                            && !Aapt2ResourceTypes.isEmptyResourceTableFailure(e.getMessage())) {
+                    // to spot, so the compiler is the one that finds it. Fall back
+                    // to the original AAPT only for that known compatibility case;
+                    // an invalid/empty resource archive remains a hard failure.
+                    if (!Aapt2ResourceTypes.isUnknownTypeFailure(e.getMessage())) {
                         this.errMessage = e.getMessage();
                         return false;
                     }

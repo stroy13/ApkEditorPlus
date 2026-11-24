@@ -240,6 +240,10 @@ public class ARSCDecoder {
 
     private ResPackage readTablePackage() throws IOException, AndrolibException {
         checkChunkType(Header.TYPE_PACKAGE);
+        if (mHeader.headerSize < 284) {
+            throw new AndrolibException("Resource package header is under 284 bytes: "
+                    + mHeader.headerSize);
+        }
         int id = mIn.readInt();
 
         if (id == 0) {
@@ -262,6 +266,24 @@ public class ARSCDecoder {
         mIn.skipInt();
         /* lastPublicKey */
         mIn.skipInt();
+
+        // Android added typeIdOffset to ResTable_package after the original
+        // 284-byte header. It is present in split/newer APKs, including the
+        // supplied APK (header size 288, offset 0). Starting the type string
+        // pool at 284 silently consumes this field as a null string-pool header,
+        // leaving the decoded package with no usable types/values.
+        mTypeIdOffset = 0;
+        int extraHeaderBytes = mHeader.headerSize - 284;
+        if (extraHeaderBytes >= 4) {
+            mTypeIdOffset = mIn.readInt();
+            extraHeaderBytes -= 4;
+        }
+        if (extraHeaderBytes > 0) {
+            int skipped = mIn.skipBytes(extraHeaderBytes);
+            if (skipped != extraHeaderBytes) {
+                throw new IOException("Truncated resource package header");
+            }
+        }
 
         mTypeNames = StringBlock.read(mIn);
         mSpecNames = StringBlock.read(mIn);
@@ -420,7 +442,7 @@ public class ARSCDecoder {
         // id (u8), flags (u8), reserved (u16), entryCount (u32),
         // entriesStart (u32). The configuration follows these fields.
         mIn.readFully(perfBuf);
-        int typeId = perfBuf[0] & 0xff;
+        int typeId = (perfBuf[0] & 0xff) - mTypeIdOffset;
         int typeFlags = perfBuf[1] & 0xff;
         if (typeId == 0 || typeId > mTypeNames.getCount()) {
             throw new AndrolibException("Invalid resource type ID: " + typeId);

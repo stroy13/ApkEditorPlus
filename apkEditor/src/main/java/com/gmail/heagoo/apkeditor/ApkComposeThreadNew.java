@@ -523,9 +523,9 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
                         if (failedOutput.exists()) failedOutput.delete();
                         // A renamed type that only ever held values has no
                         // directory to spot, so the compiler is the one that
-                        // finds it. Fall back rather than fail the build.
-                        if (Aapt2ResourceTypes.isUnknownTypeFailure(e.getMessage())
-                                || Aapt2ResourceTypes.isEmptyResourceTableFailure(e.getMessage())) {
+                        // finds it. Fall back only for that known compatibility
+                        // case; an invalid/empty archive remains a hard failure.
+                        if (Aapt2ResourceTypes.isUnknownTypeFailure(e.getMessage())) {
                             warnAapt2Fallback(null);
                         } else {
                             this.errMessage = e.getMessage();

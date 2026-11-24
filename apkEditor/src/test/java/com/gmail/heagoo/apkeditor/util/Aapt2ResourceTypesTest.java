@@ -195,14 +195,4 @@ public class Aapt2ResourceTypesTest {
         assertFalse(Aapt2ResourceTypes.isUnknownTypeFailure(null));
     }
 
-    @Test
-    public void recognisesEmptyResourceTableAsLegacyAaptFallback() {
-        assertTrue(Aapt2ResourceTypes.isEmptyResourceTableFailure(
-                "resources.arsc has no packages"));
-        assertTrue(Aapt2ResourceTypes.isEmptyResourceTableFailure(
-                "AAPT2 resource archive invalid: resources.arsc package count mismatch"));
-        assertFalse(Aapt2ResourceTypes.isEmptyResourceTableFailure(
-                "resources.arsc is truncated"));
-        assertFalse(Aapt2ResourceTypes.isEmptyResourceTableFailure(null));
-    }
 }
