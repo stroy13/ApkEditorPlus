@@ -46,6 +46,7 @@ public class ResAttrDecoder {
     private static final int ANDROID_ATTR_EXCLUDE_FROM_RECENTS = 0x01010017;
     private static final int ANDROID_ATTR_GRANT_URI_PERMISSIONS = 0x0101001b;
     private static final int ANDROID_ATTR_LAUNCH_MODE = 0x0101001d;
+    private static final int ANDROID_ATTR_SCREEN_ORIENTATION = 0x0101001e;
     private static final int ANDROID_ATTR_CONFIG_CHANGES = 0x0101001f;
     private static final int ANDROID_ATTR_RESOURCE = 0x01010025;
     private static final int ANDROID_ATTR_MIN_SDK = 0x0101020c;
@@ -199,6 +200,13 @@ public class ResAttrDecoder {
                 return exact(scalar, new int[]{0, 1, 2, 3, 4},
                         new String[]{"standard", "singleTop", "singleTask", "singleInstance",
                                 "singleInstancePerTask"});
+            case ANDROID_ATTR_SCREEN_ORIENTATION:
+                return exact(scalar,
+                        new int[]{3, 10, 13, 0, 14, 5, 1, 8, 9, 4, 6, 7, 2, 11, 12, -1},
+                        new String[]{"behind", "fullSensor", "fullUser", "landscape", "locked",
+                                "nosensor", "portrait", "reverseLandscape", "reversePortrait",
+                                "sensor", "sensorLandscape", "sensorPortrait", "user",
+                                "userLandscape", "userPortrait", "unspecified"});
             case ANDROID_ATTR_WINDOW_SOFT_INPUT_MODE:
                 return renderWindowSoftInputMode(scalar);
             case ANDROID_ATTR_PERSISTABLE_MODE:
@@ -552,6 +560,7 @@ public class ResAttrDecoder {
         if ("excludeFromRecents".equals(name)) return ANDROID_ATTR_EXCLUDE_FROM_RECENTS;
         if ("grantUriPermissions".equals(name)) return ANDROID_ATTR_GRANT_URI_PERMISSIONS;
         if ("launchMode".equals(name)) return ANDROID_ATTR_LAUNCH_MODE;
+        if ("screenOrientation".equals(name)) return ANDROID_ATTR_SCREEN_ORIENTATION;
         if ("configChanges".equals(name)) return ANDROID_ATTR_CONFIG_CHANGES;
         if ("resource".equals(name)) return ANDROID_ATTR_RESOURCE;
         if ("minSdkVersion".equals(name)) return ANDROID_ATTR_MIN_SDK;
@@ -607,6 +616,7 @@ public class ResAttrDecoder {
             case ANDROID_ATTR_EXCLUDE_FROM_RECENTS: return "excludeFromRecents";
             case ANDROID_ATTR_GRANT_URI_PERMISSIONS: return "grantUriPermissions";
             case ANDROID_ATTR_LAUNCH_MODE: return "launchMode";
+            case ANDROID_ATTR_SCREEN_ORIENTATION: return "screenOrientation";
             case ANDROID_ATTR_CONFIG_CHANGES: return "configChanges";
             case ANDROID_ATTR_RESOURCE: return "resource";
             case ANDROID_ATTR_MIN_SDK: return "minSdkVersion";

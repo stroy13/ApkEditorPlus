@@ -18,6 +18,7 @@ public class ResAttrDecoderTest {
     private static final int ICON = ANDROID | 0x00010002;
     private static final int CONFIG_CHANGES = ANDROID | 0x0001001f;
     private static final int LAUNCH_MODE = ANDROID | 0x0001001d;
+    private static final int SCREEN_ORIENTATION = ANDROID | 0x0001001e;
     private static final int WINDOW_SOFT_INPUT_MODE = ANDROID | 0x0001022b;
     private static final int FOREGROUND_SERVICE_TYPE = ANDROID | 0x00010599;
     private static final int ENABLE_ON_BACK_INVOKED_CALLBACK = ANDROID | 0x0001066c;
@@ -34,6 +35,12 @@ public class ResAttrDecoderTest {
                         "configChanges"));
         assertEquals("singleTask", decoder.decode(TypedValue.TYPE_STRING, 0, "2",
                 LAUNCH_MODE, "launchMode"));
+        assertEquals("portrait", decoder.decode(TypedValue.TYPE_STRING, 0, "1",
+                SCREEN_ORIENTATION, "screenOrientation"));
+        assertEquals("unspecified", decoder.decode(TypedValue.TYPE_STRING, 0, "-1",
+                SCREEN_ORIENTATION, "screenOrientation"));
+        assertEquals("fullUser", decoder.decode(TypedValue.TYPE_STRING, 0, "13",
+                SCREEN_ORIENTATION, "screenOrientation"));
         assertEquals("adjustResize", decoder.decode(TypedValue.TYPE_STRING, 0, "0x10",
                 WINDOW_SOFT_INPUT_MODE, "windowSoftInputMode"));
         assertEquals("stateAlwaysHidden|adjustResize",
