@@ -35,6 +35,12 @@ public final class BuildLogDisplay {
         {"Output manifest: ", "Итоговый манифест: "},
         {"Signing options: ", "Параметры подписи: "},
         {"Replacements: ", "Замены: "},
+        {"Replacement files and source entry sets validated", "Файлы замен и наборы исходных entries проверены"},
+        {"Source ZIP entries available: ", "Доступно исходных ZIP entries: "},
+        {"Resource entry mapping validated: ", "Карта ресурсных entries проверена: "},
+        {"Resource entry mapping reuses source entry: ", "Карта ресурсов повторно использует source entry: "},
+        {"Native ZIP merge preserved ", "Нативное ZIP-объединение сохранило "},
+        {"Native ZIP modify preserved ", "Нативная ZIP-модификация сохранила "},
         {"Replacement files validated", "Файлы замен проверены"},
         {"Certificate subject: ", "Субъект сертификата: "},
         {"Temp unsigned: ", "Временный неподписанный APK: "},
@@ -119,6 +125,11 @@ public final class BuildLogDisplay {
                 rest = rest.replace("resources=", "ресурсы=")
                         .replace("additions=", "добавления=")
                         .replace("; original APK is not used as an input", "; исходный APK не используется как источник");
+            } else if (pair[0].equals("Native ZIP merge preserved ")) {
+                rest = rest.replace(" non-resource source entries", " не-ресурсных исходных entries");
+            } else if (pair[0].equals("Native ZIP modify preserved ")) {
+                rest = rest.replace(" source entries and ", " исходных entries и ")
+                        .replace(" additions", " добавлений");
             } else if (pair[0].equals("Framework parser diagnostics: ")) {
                 rest = rest.replace("legacy parser rejected:", "старый парсер отклонил:")
                         .replace("legacy parser unavailable:", "старый парсер недоступен:")

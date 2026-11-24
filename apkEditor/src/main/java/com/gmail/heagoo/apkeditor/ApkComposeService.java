@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.Thread;
 import java.lang.ref.WeakReference;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -187,29 +188,27 @@ public class ApkComposeService extends Service implements ITaskCallback {
 
     private Map<String, String> getMapFromFile(String filepath) {
         Map<String, String> result = new HashMap<>();
-        BufferedReader br = null;
-        try {
-            br = new BufferedReader(new InputStreamReader(new FileInputStream(filepath)));
-            for (String line = br.readLine(); line != null; line = br.readLine()) {
-                String key = line;
-                String value = br.readLine();
-                if (value != null) {
-                    result.put(key, value);
-                }
-            }
-        } catch (Exception e) {
-        } catch (Throwable th) {
-            if (br != null) {
-                try {
-                    br.close();
-                } catch (IOException e2) {
-                }
-            }
-            throw th;
+        if (filepath == null || filepath.length() == 0) {
+            throw new IllegalArgumentException("Entry mapping file is missing");
         }
-        try {
-            br.close();
-        } catch (IOException e3) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(
+                new FileInputStream(filepath), StandardCharsets.UTF_8))) {
+            String key;
+            while ((key = br.readLine()) != null) {
+                String value = br.readLine();
+                if (value == null) {
+                    throw new IOException("Entry mapping has an unmatched key: " + key);
+                }
+                if (key.length() == 0 || value.length() == 0) {
+                    throw new IOException("Entry mapping contains an empty path");
+                }
+                if (result.containsKey(key)) {
+                    throw new IOException("Entry mapping contains a duplicate key: " + key);
+                }
+                result.put(key, value);
+            }
+        } catch (IOException error) {
+            throw new IllegalArgumentException("Cannot read entry mapping: " + filepath, error);
         }
         return result;
     }

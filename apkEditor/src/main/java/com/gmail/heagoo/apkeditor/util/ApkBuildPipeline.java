@@ -159,7 +159,8 @@ public final class ApkBuildPipeline {
             log(out, "delete " + name);
         }
         validateReplacements(replaces, added);
-        log(out, "Replacement files validated");
+        validateSourceEntrySets(source, replaces, added, deleted, out);
+        log(out, "Replacement files and source entry sets validated");
         Progress report = progress == null ? NO_PROGRESS : progress;
         Cancellation cancel = cancellation == null ? NEVER_CANCELLED : cancellation;
         log(out, "Signing options: minSdk=" + options.minSdkVersion
@@ -250,10 +251,120 @@ public final class ApkBuildPipeline {
         }
     }
 
+    /**
+     * Reject stale edit maps before writing an output archive. A missing
+     * replacement used to be silently ignored by the merge loop, which made a
+     * stale decoded-to-ZIP mapping look like a successful build while dropping
+     * the user's edited file. Additions and deletions are checked for the same
+     * conflicting entry name so one operation cannot silently win over another.
+     */
+    public static void validateSourceEntrySets(File source,
+                                               Map<String, String> replaces,
+                                               Map<String, String> added,
+                                               Set<String> deleted,
+                                               Logger logger) throws IOException {
+        replaces = safeMap(replaces);
+        added = safeMap(added);
+        deleted = deleted == null ? Collections.emptySet() : deleted;
+        if (source == null || !source.isFile()) {
+            throw new IOException("Source APK does not exist: " + source);
+        }
+        Set<String> sourceNames = new HashSet<>();
+        try (ZipFile zip = new ZipFile(source)) {
+            Enumeration<? extends ZipEntry> entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                if (!sourceNames.add(entry.getName())) {
+                    throw new IOException("Duplicate ZIP entry: " + entry.getName());
+                }
+            }
+        }
+        for (Map.Entry<String, String> entry : replaces.entrySet()) {
+            String name = entry.getKey();
+            validateEntryName(name);
+            requireReadable(entry.getValue());
+            if (!sourceNames.contains(name)) {
+                throw new IOException("Replacement entry is not present in source APK: " + name);
+            }
+            if (deleted.contains(name)) {
+                throw new IOException("Entry is both replaced and deleted: " + name);
+            }
+        }
+        for (Map.Entry<String, String> entry : added.entrySet()) {
+            String name = entry.getKey();
+            validateEntryName(name);
+            requireReadable(entry.getValue());
+            if (sourceNames.contains(name)) {
+                throw new IOException("Added entry already exists in source APK: " + name);
+            }
+            if (deleted.contains(name)) {
+                throw new IOException("Entry is both added and deleted: " + name);
+            }
+        }
+        for (String name : deleted) {
+            validateEntryName(name);
+        }
+        log(logger, "Source ZIP entries available: " + sourceNames.size());
+    }
+
+    /**
+     * Validate the decoded-resource mapping against the APK it references.
+     * This is public because the standard compose worker validates the mapping
+     * before invoking the legacy native ZIP engine.
+     */
+    public static void validateEntryMappings(File source,
+                                             Map<String, String> mappings) throws IOException {
+        validateEntryMappings(source, mappings, null);
+    }
+
+    public static void validateEntryMappings(File source,
+                                             Map<String, String> mappings,
+                                             Logger logger) throws IOException {
+        if (mappings == null || mappings.isEmpty()) {
+            return;
+        }
+        if (source == null || !source.isFile()) {
+            throw new IOException("Mapping source APK does not exist: " + source);
+        }
+        Set<String> sourceNames = new HashSet<>();
+        try (ZipFile zip = new ZipFile(source)) {
+            Enumeration<? extends ZipEntry> entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                if (!sourceNames.add(entry.getName())) {
+                    throw new IOException("Duplicate ZIP entry: " + entry.getName());
+                }
+            }
+        }
+        Set<String> reverse = new HashSet<>();
+        for (Map.Entry<String, String> mapping : mappings.entrySet()) {
+            validateEntryName(mapping.getKey());
+            validateEntryName(mapping.getValue());
+            if (!sourceNames.contains(mapping.getValue())) {
+                throw new IOException("Stale resource entry mapping: " + mapping.getKey()
+                        + " -> " + mapping.getValue() + " is absent from " + source);
+            }
+            // Multiple decoded names may legitimately point at one source file
+            // (resource aliases), so this is diagnostic rather than an error.
+            if (!reverse.add(mapping.getValue())) {
+                log(logger, "Resource entry mapping reuses source entry: " + mapping.getValue());
+            }
+        }
+        log(logger, "Resource entry mapping validated: " + mappings.size()
+                + " entries against " + sourceNames.size() + " ZIP entries");
+    }
+
     private static void validateEntryName(String name) throws IOException {
         if (name == null || name.isEmpty() || name.startsWith("/") || name.contains("\\")
-                || name.contains("../") || name.contains("/./") || name.endsWith("/.")) {
+                || name.indexOf('\0') >= 0 || name.contains("../") || name.equals("..")
+                || name.contains("/./") || name.endsWith("/.") || name.endsWith("/..")) {
             throw new IOException("Unsafe ZIP entry name: " + name);
+        }
+        String[] parts = name.split("/", -1);
+        for (String part : parts) {
+            if (part.isEmpty() || ".".equals(part) || "..".equals(part)) {
+                throw new IOException("Unsafe ZIP entry name: " + name);
+            }
         }
     }
 
@@ -308,6 +419,7 @@ public final class ApkBuildPipeline {
         try {
             SigningOptions options = new SigningOptions(null, null, 1, targetSdkVersion,
                     false, false, false, false, 6, extractNativeLibs);
+            validateSourceEntrySets(source, replacedFiles, addedFiles, deletedFiles, logger);
             merge(source, temp, replacedFiles, addedFiles, deletedFiles, options,
                     null, null, logger);
             validateResourceArchive(temp);
@@ -689,7 +801,8 @@ public final class ApkBuildPipeline {
         log(out, "Signed APK structure verified");
     }
 
-    private static void atomicReplace(File from, File to) throws IOException {
+    /** Replace a published file only after a caller has fully validated its temporary output. */
+    public static void atomicReplace(File from, File to) throws IOException {
         try {
             Files.move(from.toPath(), to.toPath(), StandardCopyOption.ATOMIC_MOVE,
                     StandardCopyOption.REPLACE_EXISTING);

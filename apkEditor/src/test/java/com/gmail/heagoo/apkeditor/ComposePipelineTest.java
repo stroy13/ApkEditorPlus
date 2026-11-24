@@ -109,6 +109,36 @@ public class ComposePipelineTest {
     }
 
     @Test
+    public void fullComposeCollectsEveryDecodedPayloadAreaWithoutAmbiguousOverwrite() throws Exception {
+        String full = read("ApkComposeThreadNew.java");
+        for (String area : new String[]{"assets/", "lib/", "libs/", "kotlin/", "unknown/"}) {
+            assertTrue("full compose must collect " + area, full.contains("collectFiles(filesToAdd, "
+                    + area.replace("/", "Dir") + ", \"" + area + "\");")
+                    || full.contains("\"" + area + "\""));
+        }
+        assertTrue(full.contains("collectDexFiles(filesToAdd);"));
+        assertTrue(full.contains("Ambiguous decoded APK entry"));
+        assertTrue(full.contains("Cannot scan decoded directory"));
+    }
+
+    @Test
+    public void nativeZipPathsVerifyEntryPreservation() throws Exception {
+        String legacy = read("ApkComposeThread.java");
+        assertTrue("standard resource merge must check entries lost by void native API",
+                legacy.contains("validateMergedArchive();")
+                        && legacy.contains("Native ZIP merge dropped original entry"));
+        assertTrue("unsigned native modification must check entries before publication",
+                legacy.contains("validateModifiedArchive(nativeOutput);")
+                        && legacy.contains("Native ZIP modify dropped source entry")
+                        && legacy.contains("ApkBuildPipeline.atomicReplace(nativeOutput, target)"));
+        assertTrue("stale decoded mappings must be validated before native ZIP calls",
+                legacy.contains("ApkBuildPipeline.validateEntryMappings"));
+        assertTrue("native ZIP operations must validate source entry sets before writing",
+                legacy.contains("ApkBuildPipeline.validateSourceEntrySets(new File(this.tempApkPath)")
+                        && legacy.contains("ApkBuildPipeline.validateResourceArchive(new File(this.tempApkPath))"));
+    }
+
+    @Test
     public void signingStageActuallySigns() throws Exception {
         String freshSource = read("ApkComposeThreadNew.java");
         String fresh = runBody(freshSource);

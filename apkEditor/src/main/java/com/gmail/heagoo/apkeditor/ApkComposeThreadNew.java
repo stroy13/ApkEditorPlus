@@ -237,6 +237,9 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
         File decodeDir;
         File decodeDir2 = new File(this.decodedFilePath);
         File[] files = decodeDir2.listFiles();
+        if (files == null) {
+            throw new IOException("Cannot scan decoded project: " + decodeDir2);
+        }
         int length = files.length;
         int i = 0;
         while (i < length) {
@@ -381,32 +384,53 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
         }
     }
 
-    private void collectDexFiles(Map<String, String> filesToAdd) {
-        filesToAdd.putAll(this.builtDexFiles);
+    private void collectDexFiles(Map<String, String> filesToAdd) throws IOException {
+        for (Map.Entry<String, String> entry : this.builtDexFiles.entrySet()) {
+            addCollectedFile(filesToAdd, entry.getKey(), new File(entry.getValue()));
+        }
         File decodeDir = new File(this.decodedFilePath);
         File[] files = decodeDir.listFiles();
+        if (files == null) {
+            throw new IOException("Cannot scan decoded project: " + decodeDir);
+        }
         for (File f : files) {
             String name = f.getName();
             if (f.isFile() && name.endsWith(".dex") && !this.builtDexFiles.containsKey(name)) {
                 File dex = new File(this.decodedFilePath + "/build/" + name);
                 if (dex.isFile() && dex.exists()) {
-                    filesToAdd.put(name, dex.getPath());
+                    addCollectedFile(filesToAdd, name, dex);
                 } else {
-                    filesToAdd.put(name, f.getPath());
+                    addCollectedFile(filesToAdd, name, f);
                 }
             }
         }
     }
 
-    private void collectFiles(Map<String, String> relPath2AbsPath, File dir, String relPath) {
+    private void collectFiles(Map<String, String> relPath2AbsPath, File dir, String relPath)
+            throws IOException {
         File[] files = dir.listFiles();
+        if (files == null) {
+            throw new IOException("Cannot scan decoded directory: " + dir);
+        }
         for (File f : files) {
             if (f.isFile()) {
-                relPath2AbsPath.put(relPath + f.getName(), f.getPath());
+                addCollectedFile(relPath2AbsPath, relPath + f.getName(), f);
             } else if (f.isDirectory()) {
                 collectFiles(relPath2AbsPath, f, relPath + f.getName() + "/");
             }
         }
+    }
+
+    /** Never let two decoded files silently claim the same APK entry name. */
+    private void addCollectedFile(Map<String, String> filesToAdd, String entryName, File file)
+            throws IOException {
+        String path = file.getPath();
+        String previous = filesToAdd.get(entryName);
+        if (previous != null && !new File(previous).getCanonicalFile().equals(file.getCanonicalFile())) {
+            throw new IOException("Ambiguous decoded APK entry " + entryName
+                    + ": " + previous + " and " + path);
+        }
+        filesToAdd.put(entryName, path);
     }
 
     private boolean needRebuildResource() throws IOException {

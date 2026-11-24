@@ -16,6 +16,7 @@ import com.gmail.heagoo.apkeditor.util.Aapt2Pipeline;
 import com.gmail.heagoo.apkeditor.util.Aapt2ResourceTypes;
 import com.gmail.heagoo.apkeditor.util.MissingResourceAttributes;
 import com.gmail.heagoo.apkeditor.util.BundledFrameworkFiles;
+import com.gmail.heagoo.apkeditor.util.ApkBuildPipeline;
 import com.gmail.heagoo.apkeditor.util.SignHelper;
 import com.gmail.heagoo.apkeditor.util.ComposeBuildTrace;
 import com.gmail.heagoo.apkeditor.util.ManifestResourceReferenceNormalizer;
@@ -26,6 +27,7 @@ import com.gmail.heagoo.common.IOUtils;
 import com.gmail.heagoo.common.ITaskCallback;
 import com.gmail.heagoo.common.SDCard;
 import com.gmail.heagoo.common.TextFileReader;
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -35,14 +37,19 @@ import java.io.InputStreamReader;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.Enumeration;
 import java.util.function.BooleanSupplier;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /* loaded from: /tmp/apkx/classes5.dex */
 public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCallback {
@@ -283,11 +290,16 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
         this.stringModified = strModified;
         this.manifestModified = manifestModified;
         this.resFileModified = resFileModified;
-        this.modifiedSmaliFolders = modifiedSmaliFolders;
-        this.addedFiles = addedFiles;
-        this.deletedFiles = deletedFiles;
-        this.replacedFiles = replacedFiles;
-        this.fileEntry2ZipEntry = fileEntry2ZipEntry;
+        this.modifiedSmaliFolders = modifiedSmaliFolders == null
+                ? new java.util.ArrayList<String>() : new java.util.ArrayList<>(modifiedSmaliFolders);
+        this.addedFiles = addedFiles == null ? new HashMap<String, String>()
+                : new HashMap<>(addedFiles);
+        this.deletedFiles = deletedFiles == null ? new HashSet<String>()
+                : new HashSet<>(deletedFiles);
+        this.replacedFiles = replacedFiles == null ? new HashMap<String, String>()
+                : new HashMap<>(replacedFiles);
+        this.fileEntry2ZipEntry = fileEntry2ZipEntry == null
+                ? new HashMap<String, String>() : new HashMap<>(fileEntry2ZipEntry);
         this.bSignApk = bSignApk;
     }
 
@@ -296,6 +308,14 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
         this.buildTrace = new ComposeBuildTrace(new File(this.targetApkPath), "standard", this.ctx);
         try {
             this.buildTrace.begin("plan build");
+            if (this.fileEntry2ZipEntry.isEmpty()) {
+                ApkBuildPipeline.validateSourceEntrySets(new File(this.srcApkPath),
+                        null, null, null, this.buildTrace.logger());
+            } else {
+                ApkBuildPipeline.validateEntryMappings(new File(this.srcApkPath),
+                        this.fileEntry2ZipEntry,
+                        this.buildTrace.logger());
+            }
             boolean rebuildResNeeded = isResourceModified();
             this.stepInfo.stepTotal = this.bSignApk ? 2 : 1;
             if (rebuildResNeeded) {
@@ -572,7 +592,7 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
             sb1.append('\n');
             sb1.append(value);
             sb1.append('\n');
-            mappingLen += key.getBytes().length + value.getBytes().length + 2;
+            mappingLen += key.getBytes(StandardCharsets.UTF_8).length + value.getBytes(StandardCharsets.UTF_8).length + 2;
         }
         int replaceLen = 0;
         StringBuilder sb2 = new StringBuilder();
@@ -584,7 +604,7 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
                 sb2.append('\n');
                 sb2.append(value2);
                 sb2.append('\n');
-                replaceLen += key2.getBytes().length + value2.getBytes().length + 2;
+                replaceLen += key2.getBytes(StandardCharsets.UTF_8).length + value2.getBytes(StandardCharsets.UTF_8).length + 2;
             }
         }
         for (Map.Entry<String, String> entry3 : this.replacedFiles.entrySet()) {
@@ -595,7 +615,7 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
                 sb2.append('\n');
                 sb2.append(value3);
                 sb2.append('\n');
-                replaceLen += key3.getBytes().length + value3.getBytes().length + 2;
+                replaceLen += key3.getBytes(StandardCharsets.UTF_8).length + value3.getBytes(StandardCharsets.UTF_8).length + 2;
             }
         }
         int replaceLen2 = replaceLen;
@@ -606,18 +626,205 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
             sb2.append('\n');
             sb2.append(entry4.getValue());
             sb2.append('\n');
-            replaceLen2 += key4.getBytes().length + value4.getBytes().length + 2;
+            replaceLen2 += key4.getBytes(StandardCharsets.UTF_8).length + value4.getBytes(StandardCharsets.UTF_8).length + 2;
         }
         ZipEngine.merge(this.ctx, this.tempApkPath, this.srcApkPath, sb2.toString(), replaceLen2, sb1.toString(), mappingLen);
+        validateMergedArchive();
+        ApkBuildPipeline.validateResourceArchive(new File(this.tempApkPath));
+    }
+
+    /**
+     * The native merge API returns void. Verify its most important contract
+     * before signing: every original non-resource entry must still be present
+     * in the generated resource archive. Otherwise a native zip error could
+     * silently produce an installable-looking APK with missing code/assets.
+     */
+    private void validateMergedArchive() throws IOException {
+        Set<String> mappingValues = new HashSet<>();
+        for (String value : this.fileEntry2ZipEntry.values()) {
+            if (value != null) {
+                mappingValues.add(value);
+            }
+        }
+        int checked = 0;
+        try (ZipFile source = new ZipFile(this.srcApkPath);
+             ZipFile output = new ZipFile(this.tempApkPath)) {
+            Enumeration<? extends ZipEntry> entries = source.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                String name = entry.getName();
+                if (isResourceSourceEntry(name, mappingValues) || isOldSignature(name)) {
+                    continue;
+                }
+                ZipEntry outputEntry = output.getEntry(name);
+                if (outputEntry == null) {
+                    throw new IOException("Native ZIP merge dropped original entry: " + name);
+                }
+                if (!zipEntryMatchesEntry(source, entry, output, outputEntry)) {
+                    throw new IOException("Native ZIP merge changed original entry: " + name);
+                }
+                checked++;
+            }
+        }
+        if (this.buildTrace != null && this.buildTrace.logger() != null) {
+            this.buildTrace.logger().log("Native ZIP merge preserved " + checked
+                    + " non-resource source entries");
+        }
+    }
+
+    private static boolean isResourceSourceEntry(String name, Set<String> mappingValues) {
+        return name.startsWith("res/") || name.startsWith("r/")
+                || "resources.arsc".equals(name) || "AndroidManifest.xml".equals(name)
+                || mappingValues.contains(name);
+    }
+
+    private static boolean isOldSignature(String name) {
+        String upper = name.toUpperCase(Locale.ROOT);
+        return upper.startsWith("META-INF/")
+                && (upper.endsWith(".SF") || upper.endsWith(".RSA") || upper.endsWith(".DSA")
+                || upper.endsWith(".EC") || "META-INF/MANIFEST.MF".equals(upper));
+    }
+
+    private static boolean zipEntryMatchesEntry(ZipFile firstArchive, ZipEntry firstEntry,
+                                                ZipFile secondArchive, ZipEntry secondEntry)
+            throws IOException {
+        if (firstEntry.isDirectory() != secondEntry.isDirectory()
+                || firstEntry.getSize() != secondEntry.getSize()) {
+            return false;
+        }
+        if (firstEntry.isDirectory()) {
+            return true;
+        }
+        try (InputStream first = new BufferedInputStream(firstArchive.getInputStream(firstEntry));
+             InputStream second = new BufferedInputStream(secondArchive.getInputStream(secondEntry))) {
+            byte[] firstBuffer = new byte[8192];
+            byte[] secondBuffer = new byte[8192];
+            while (true) {
+                int firstRead = first.read(firstBuffer);
+                int secondRead = second.read(secondBuffer);
+                if (firstRead != secondRead) {
+                    return false;
+                }
+                if (firstRead < 0) {
+                    return true;
+                }
+                for (int i = 0; i < firstRead; i++) {
+                    if (firstBuffer[i] != secondBuffer[i]) {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    private static boolean zipEntryMatchesFile(ZipFile archive, ZipEntry entry, File file)
+            throws IOException {
+        if (!file.isFile() || entry.isDirectory() || entry.getSize() != file.length()) {
+            return false;
+        }
+        try (InputStream actual = new BufferedInputStream(archive.getInputStream(entry));
+             InputStream expected = new BufferedInputStream(new FileInputStream(file))) {
+            byte[] actualBuffer = new byte[8192];
+            byte[] expectedBuffer = new byte[8192];
+            while (true) {
+                int actualRead = actual.read(actualBuffer);
+                int expectedRead = expected.read(expectedBuffer);
+                if (actualRead != expectedRead) {
+                    return false;
+                }
+                if (actualRead < 0) {
+                    return true;
+                }
+                for (int i = 0; i < actualRead; i++) {
+                    if (actualBuffer[i] != expectedBuffer[i]) {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    private void validateModifiedArchive(File outputFile) throws IOException {
+        int checked = 0;
+        try (ZipFile source = new ZipFile(this.tempApkPath);
+             ZipFile output = new ZipFile(outputFile)) {
+            Enumeration<? extends ZipEntry> entries = source.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                String name = entry.getName();
+                if (this.deletedFiles.contains(name) || isOldSignature(name)) {
+                    continue;
+                }
+                ZipEntry outputEntry = output.getEntry(name);
+                if (outputEntry == null) {
+                    throw new IOException("Native ZIP modify dropped source entry: " + name);
+                }
+                if (!zipEntryMatchesEntry(source, entry, output, outputEntry)
+                        && !this.replacedFiles.containsKey(name)) {
+                    throw new IOException("Native ZIP modify changed untouched entry: " + name);
+                }
+                checked++;
+            }
+            for (Map.Entry<String, String> replacement : this.replacedFiles.entrySet()) {
+                ZipEntry outputEntry = output.getEntry(replacement.getKey());
+                if (outputEntry == null || !zipEntryMatchesFile(output, outputEntry,
+                        new File(replacement.getValue()))) {
+                    throw new IOException("Native ZIP modify did not apply replacement: "
+                            + replacement.getKey());
+                }
+            }
+            for (Map.Entry<String, String> addition : this.addedFiles.entrySet()) {
+                ZipEntry outputEntry = output.getEntry(addition.getKey());
+                if (outputEntry == null || !zipEntryMatchesFile(output, outputEntry,
+                        new File(addition.getValue()))) {
+                    throw new IOException("Native ZIP modify did not apply addition: "
+                            + addition.getKey());
+                }
+            }
+            for (String deleted : this.deletedFiles) {
+                if (output.getEntry(deleted) != null) {
+                    throw new IOException("Native ZIP modify did not delete entry: " + deleted);
+                }
+            }
+        }
+        if (this.buildTrace != null && this.buildTrace.logger() != null) {
+            this.buildTrace.logger().log("Native ZIP modify preserved " + checked
+                    + " source entries and " + this.addedFiles.size() + " additions");
+        }
     }
 
     private boolean isResourceModified() {
         return this.stringModified || this.manifestModified || this.resFileModified;
     }
 
+    /** Put freshly assembled DEX files in the correct ZIP operation set. */
+    private void prepareDexOperations() throws IOException {
+        if (this.dexReplaces.isEmpty()) {
+            return;
+        }
+        Set<String> sourceNames = new HashSet<>();
+        try (ZipFile source = new ZipFile(this.tempApkPath)) {
+            Enumeration<? extends ZipEntry> entries = source.entries();
+            while (entries.hasMoreElements()) {
+                sourceNames.add(entries.nextElement().getName());
+            }
+        }
+        for (Map.Entry<String, String> dex : this.dexReplaces.entrySet()) {
+            String name = dex.getKey();
+            if (this.replacedFiles.containsKey(name) || this.addedFiles.containsKey(name)) {
+                throw new IOException("DEX operation conflicts with an existing ZIP operation: " + name);
+            }
+            if (sourceNames.contains(name)) {
+                this.replacedFiles.put(name, dex.getValue());
+            } else {
+                this.addedFiles.put(name, dex.getValue());
+            }
+        }
+    }
+
     private boolean signApk() {
-        this.replacedFiles.putAll(this.dexReplaces);
         try {
+            prepareDexOperations();
             SignHelper.sign(this.ctx, this.tempApkPath, this.targetApkPath, this.replacedFiles, this.addedFiles, this.deletedFiles,
                     null, null, this.buildTrace == null ? null : this.buildTrace.logger());
             return true;
@@ -629,7 +836,7 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
     }
 
     private boolean notSignApk() throws IOException {
-        this.replacedFiles.putAll(this.dexReplaces);
+        prepareDexOperations();
         StringBuilder sb1 = new StringBuilder();
         int addLen = 0;
         for (Map.Entry<String, String> entry : this.addedFiles.entrySet()) {
@@ -639,14 +846,14 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
             sb1.append('\n');
             sb1.append(value);
             sb1.append('\n');
-            addLen += key.getBytes().length + value.getBytes().length + 2;
+            addLen += key.getBytes(StandardCharsets.UTF_8).length + value.getBytes(StandardCharsets.UTF_8).length + 2;
         }
         StringBuilder sb2 = new StringBuilder();
         int deleteLen = 0;
         for (String entry2 : this.deletedFiles) {
             sb2.append(entry2);
             sb2.append('\n');
-            deleteLen += entry2.getBytes().length + 1;
+            deleteLen += entry2.getBytes(StandardCharsets.UTF_8).length + 1;
         }
         StringBuilder sb3 = new StringBuilder();
         int replaceLen = 0;
@@ -657,10 +864,29 @@ public class ApkComposeThread extends ComposeThread implements ISmaliAssembleCal
             sb3.append('\n');
             sb3.append(value2);
             sb3.append('\n');
-            replaceLen += key2.getBytes().length + value2.getBytes().length + 2;
+            replaceLen += key2.getBytes(StandardCharsets.UTF_8).length + value2.getBytes(StandardCharsets.UTF_8).length + 2;
         }
-        ZipEngine.modify(this.ctx, this.targetApkPath, this.tempApkPath, sb1.toString(), addLen, sb2.toString(), deleteLen, sb3.toString(), replaceLen);
-        com.gmail.heagoo.apkeditor.util.ApkBuildPipeline.normalizeUnsigned(new File(this.targetApkPath));
+        ApkBuildPipeline.validateSourceEntrySets(new File(this.tempApkPath),
+                this.replacedFiles, this.addedFiles, this.deletedFiles,
+                this.buildTrace == null ? null : this.buildTrace.logger());
+        File target = new File(this.targetApkPath);
+        File parent = target.getAbsoluteFile().getParentFile();
+        if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) {
+            throw new IOException("Cannot create output directory: " + parent);
+        }
+        File nativeOutput = File.createTempFile("apkeditor-modify-", ".apk", parent);
+        try {
+            ZipEngine.modify(this.ctx, nativeOutput.getPath(), this.tempApkPath,
+                    sb1.toString(), addLen, sb2.toString(), deleteLen,
+                    sb3.toString(), replaceLen);
+            validateModifiedArchive(nativeOutput);
+            ApkBuildPipeline.normalizeUnsigned(nativeOutput);
+            ApkBuildPipeline.atomicReplace(nativeOutput, target);
+        } finally {
+            if (nativeOutput.exists() && !nativeOutput.delete()) {
+                nativeOutput.deleteOnExit();
+            }
+        }
         return true;
     }
 
