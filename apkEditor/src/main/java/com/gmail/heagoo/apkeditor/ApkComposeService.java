@@ -45,7 +45,6 @@ public class ApkComposeService extends Service implements ITaskCallback {
     private Boolean resFileModified;
     private boolean signAPK;
     private String srcApkPath;
-    private String originalApkPath;
     private Boolean stringModified;
     private String targetApkPath;
     private ComposeResult composeResult = new ComposeResult();
@@ -76,7 +75,6 @@ public class ApkComposeService extends Service implements ITaskCallback {
         try {
             this.decodeRootPath = ActivityUtil.getParam(intent, "decodeRootPath");
             this.srcApkPath = ActivityUtil.getParam(intent, "srcApkPath");
-            this.originalApkPath = ActivityUtil.getParam(intent, "originalApkPath");
             this.targetApkPath = ActivityUtil.getParam(intent, "targetApkPath");
             String str = ActivityUtil.getParam(intent, "stringModified");
             this.stringModified = Boolean.valueOf(str);
@@ -161,8 +159,7 @@ public class ApkComposeService extends Service implements ITaskCallback {
         if (this.srcApkPath != null) {
             this.composeThread = new ApkComposeThread(this, this.decodeRootPath, this.srcApkPath, this.targetApkPath);
         } else {
-            this.composeThread = new ApkComposeThreadNew(this, this.decodeRootPath, this.targetApkPath,
-                    this.originalApkPath);
+            this.composeThread = new ApkComposeThreadNew(this, this.decodeRootPath, this.targetApkPath);
         }
         if (this.extraMaker != null) {
             this.composeThread.setExtraMaker(this.extraMaker);

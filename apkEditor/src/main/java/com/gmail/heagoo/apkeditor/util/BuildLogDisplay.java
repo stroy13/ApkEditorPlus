@@ -54,7 +54,11 @@ public final class BuildLogDisplay {
         {"apksig verify: ", "apksig: проверка: "},
         {"AAPT2 resource archive validated: ", "AAPT2: архив ресурсов проверен: "},
         {"AAPT2 manifest: restored synthetic Android attribute names", "AAPT2: восстановлены синтетические имена атрибутов Android в манифесте"},
+        {"AAPT2 manifest: metadata payloads preserved or repaired", "AAPT2: значения meta-data сохранены или восстановлены"},
         {"Merge entries: ", "Элементы объединения: "},
+        {"Merge source: ", "Источник ZIP объединения: "},
+        {"Merge output: ", "Результат ZIP объединения: "},
+        {"Merge provenance: ", "Происхождение файлов объединения: "},
         {"Unsigned APK assembled and validated: ", "Неподписанный APK собран и проверен: "},
         {"Signed APK structure verified", "Структура подписанного APK проверена"},
         {"ERROR: ", "ОШИБКА: "}, {"Caused by: ", "Причина: "},
@@ -111,6 +115,10 @@ public final class BuildLogDisplay {
                 rest = localizePublishedTarget(rest);
             } else if (pair[0].equals("Android package parser OK: ")) {
                 rest = localizePackageSummary(rest);
+            } else if (pair[0].equals("Merge provenance: ")) {
+                rest = rest.replace("resources=", "ресурсы=")
+                        .replace("additions=", "добавления=")
+                        .replace("; original APK is not used as an input", "; исходный APK не используется как источник");
             } else if (pair[0].equals("Framework parser diagnostics: ")) {
                 rest = rest.replace("legacy parser rejected:", "старый парсер отклонил:")
                         .replace("legacy parser unavailable:", "старый парсер недоступен:")
@@ -125,6 +133,7 @@ public final class BuildLogDisplay {
                 rest = rest.replace("sourceMethod=", "метод источника=")
                         .replace("outputMethod=", "метод результата=")
                         .replace("aligned=", "выравнивание=")
+                        .replace("source=", "источник=")
                         .replace("size=", "размер=")
                         .replace("replacement=", "замена=");
             }

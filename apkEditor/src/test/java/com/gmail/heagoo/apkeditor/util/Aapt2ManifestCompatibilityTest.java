@@ -44,6 +44,25 @@ public class Aapt2ManifestCompatibilityTest {
         assertTrue(fixed.contains("custom:value=\"\""));
     }
 
+    @Test public void preservesEmptyMetaDataPayloadAttributes() {
+        String source = "<application><meta-data android:name=\"empty.value\" android:value=\"\"/>"
+                + "<meta-data android:name=\"empty.resource\" android:resource=\"\"/>"
+                + "<service android:name=\".Service\" android:exported=\"\"/></application>";
+        String fixed = Aapt2Pipeline.removeEmptyAndroidAttributes(source);
+        assertTrue(fixed.contains("android:value=\"\""));
+        assertTrue(fixed.contains("android:resource=\"\""));
+        assertFalse(fixed.contains("android:exported"));
+    }
+
+    @Test public void addsPayloadToMetaDataWithoutValueOrResource() {
+        String source = "<application><meta-data android:name=\"missing\"/>"
+                + "<meta-data android:name=\"present\" android:value=\"text\"/></application>";
+        String fixed = Aapt2Pipeline.ensureMetaDataPayloads(source);
+        assertTrue(fixed.contains("android:name=\"missing\" android:value=\"\"/>")
+                || fixed.contains("android:name=\"missing\" android:value=\"\" />"));
+        assertTrue(fixed.contains("android:name=\"present\" android:value=\"text\""));
+    }
+
     @Test public void dropsUsesFeatureWithoutRequiredIdentityAndKeepsValidFeatures() {
         String source = "<manifest><uses-feature android:glEsVersion=\"\" android:required=\"true\"/>"
                 + "<uses-feature android:name=\"camera\" android:required=\"true\"/>"

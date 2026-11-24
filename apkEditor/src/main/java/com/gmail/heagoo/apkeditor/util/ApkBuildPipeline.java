@@ -303,6 +303,8 @@ public final class ApkBuildPipeline {
             throw new IOException("Cannot create output directory: " + parent);
         }
         File temp = File.createTempFile("apkbuild-", ".unsigned", parent);
+        log(logger, "Merge source: " + source);
+        log(logger, "Merge output: " + target);
         try {
             SigningOptions options = new SigningOptions(null, null, 1, targetSdkVersion,
                     false, false, false, false, 6, extractNativeLibs);
@@ -441,7 +443,8 @@ public final class ApkBuildPipeline {
                     checkCancelled(cancel);
                     File file = new File(entry.getValue());
                     validateReplacement(entry.getKey(), file, logSink);
-                    log(logSink, "add " + entry.getKey() + ": size=" + file.length());
+                    log(logSink, "add " + entry.getKey() + ": source=" + file.getAbsolutePath()
+                            + ", size=" + file.length());
                     try (InputStream input = new BufferedInputStream(new FileInputStream(file), BUFFER_SIZE)) {
                         writeEntry(out, counting, entry.getKey(), input, file.length(), null, file, buffer,
                                 options.targetSdkVersion, options.extractNativeLibs != 1);

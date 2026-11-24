@@ -10,7 +10,6 @@ import com.gmail.heagoo.apkeditor.ce.IDescriptionUpdate;
 import com.gmail.heagoo.apkeditor.smali.ISmaliAssembleCallback;
 import com.gmail.heagoo.apkeditor.util.Aapt2Pipeline;
 import com.gmail.heagoo.apkeditor.util.Aapt2ResourceTypes;
-import com.gmail.heagoo.apkeditor.util.Aapt2ResourceTableFallback;
 import com.gmail.heagoo.apkeditor.util.MissingResourceAttributes;
 import com.gmail.heagoo.apkeditor.util.SignHelper;
 import com.gmail.heagoo.apkeditor.util.ApkBuildPipeline;
@@ -48,7 +47,6 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
     private ITaskCallback.TaskStepInfo stepInfo;
     private boolean succeed;
     private String targetApkPath;
-    private String originalApkPath;
     private ITaskCallback taskCallback;
     private Map<String, String> builtDexFiles = new HashMap();
     private List<String> modifiedSmaliFolders = new ArrayList();
@@ -57,10 +55,6 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
     private ComposeBuildTrace buildTrace;
 
     public ApkComposeThreadNew(Context ctx, String decodedFilePath, String apkPath) {
-        this(ctx, decodedFilePath, apkPath, null);
-    }
-
-    public ApkComposeThreadNew(Context ctx, String decodedFilePath, String apkPath, String originalApkPath) {
         this.ctx = ctx;
         File fileDir = ctx.getFilesDir();
         String rootDirectory = fileDir.getAbsolutePath();
@@ -69,7 +63,6 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
         this.androidJarPath = this.binRootPath + "/android.jar";
         this.decodedFilePath = decodedFilePath;
         this.targetApkPath = apkPath;
-        this.originalApkPath = originalApkPath;
         this.resourceApkPath = decodedFilePath + "/build/resource.apk";
         LOGGER.info("aaptPath: " + this.aaptPath);
         LOGGER.info("androidJarPath: " + this.androidJarPath);
@@ -335,11 +328,6 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
     }
 
     private void mergeApk() throws IOException {
-        if (this.originalApkPath != null
-                && Aapt2ResourceTableFallback.restoreOriginalIfEmpty(this.resourceApkPath, this.originalApkPath)
-                && this.buildTrace != null && this.buildTrace.logger() != null) {
-            this.buildTrace.logger().log("AAPT2 emitted an empty resource table; preserved the original resources.arsc");
-        }
         Map<String, String> extraReplaces = new HashMap<>();
         if (this.extraMaker != null) {
             try {
@@ -377,6 +365,9 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
         if (this.buildTrace != null && this.buildTrace.logger() != null) {
             this.buildTrace.logger().log("Merge file collection and mapping: " + filesToAdd.size()
                     + " files; " + (System.nanoTime() - collectStarted) / 1000000L + " ms");
+            this.buildTrace.logger().log("Merge provenance: resources=" + this.resourceApkPath
+                    + "; additions=" + this.decodedFilePath
+                    + "; original APK is not used as an input");
         }
         long zipStarted = System.nanoTime();
         Map<String, String> added = filesToAdd;
@@ -475,18 +466,6 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
         }
     }
 
-    private void restoreEmptyResourceTable(File output) throws IOException {
-        if (this.originalApkPath == null || !new File(this.originalApkPath).isFile()) {
-            return;
-        }
-        if (Aapt2ResourceTableFallback.restoreOriginalIfEmpty(
-                output.getAbsolutePath(), this.originalApkPath)
-                && this.buildTrace != null && this.buildTrace.logger() != null) {
-            this.buildTrace.logger().log(
-                    "AAPT2 emitted an empty resource table before validation; preserved the original resources.arsc");
-        }
-    }
-
     private boolean composeResource() {
         try {
             ManifestResourceReferenceNormalizer.normalize(
@@ -509,7 +488,6 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
                         String aapt2 = new File(this.ctx.getApplicationInfo().nativeLibraryDir, newest ? "libaapt2_37.so" : "libaapt2_exec.so").getAbsolutePath();
                         Aapt2Pipeline.build(aapt2, selectedFramework, this.decodedFilePath + "/res", this.decodedFilePath + "/AndroidManifest.xml", this.resourceApkPath, this.buildTrace == null ? null : this.buildTrace.logger());
                         File output = new File(this.resourceApkPath);
-                        restoreEmptyResourceTable(output);
                         ApkBuildPipeline.validateResourceArchive(output);
                         if (this.buildTrace != null && this.buildTrace.logger() != null) {
                             this.buildTrace.logger().log("AAPT2 resource archive validated: "
@@ -566,7 +544,6 @@ public class ApkComposeThreadNew extends ComposeThread implements ISmaliAssemble
             if (ret) {
                 try {
                     File output = new File(this.resourceApkPath);
-                    restoreEmptyResourceTable(output);
                     ApkBuildPipeline.validateResourceArchive(output);
                     if (this.buildTrace != null && this.buildTrace.logger() != null) {
                         this.buildTrace.logger().log("Legacy AAPT resource archive validated: "
