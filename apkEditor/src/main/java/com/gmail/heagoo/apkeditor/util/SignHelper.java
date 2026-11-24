@@ -195,7 +195,26 @@ public final class SignHelper {
                 | PackageManager.GET_RECEIVERS
                 | PackageManager.GET_PROVIDERS;
         PackageInfo info = pm.getPackageArchiveInfo(apk.getAbsolutePath(), flags);
-        if (info == null || info.applicationInfo == null || info.packageName == null) {
+        boolean identityOnlyFallback = false;
+        if (!hasPackageIdentity(info)) {
+            // PackageInfo generation can fail independently of archive parsing when
+            // one requested component array contains metadata this platform cannot
+            // materialize. Retry without optional arrays so the final gate still
+            // proves package identity instead of reporting a false parser failure.
+            if (out != null) {
+                out.log("Android package parser returned no component-rich PackageInfo; "
+                        + "retrying with identity-only flags");
+            }
+            PackageInfo identity = pm.getPackageArchiveInfo(apk.getAbsolutePath(), 0);
+            if (hasPackageIdentity(identity)) {
+                info = identity;
+                identityOnlyFallback = true;
+                if (out != null) {
+                    out.log("Android package parser identity-only retry succeeded");
+                }
+            }
+        }
+        if (!hasPackageIdentity(info)) {
             ManifestInfo manifest = readManifest(apk);
             String splitDiagnostic = splitArchiveDiagnostic(manifest);
             if (splitDiagnostic != null) throw new IOException(splitDiagnostic + ": " + apk);
@@ -234,6 +253,7 @@ public final class SignHelper {
         }
         if (out != null) {
             out.log("Android package parser OK: package=" + info.packageName
+                    + ", metadataMode=" + (identityOnlyFallback ? "identity-only" : "components")
                     + ", versionCode=" + versionCode
                     + ", versionName=" + info.versionName
                     + ", application=" + info.applicationInfo.className
@@ -266,6 +286,10 @@ public final class SignHelper {
         }
     }
 
+    private static boolean hasPackageIdentity(PackageInfo info) {
+        return info != null && info.applicationInfo != null && info.packageName != null;
+    }
+
     private static int count(Object[] values) {
         return values == null ? 0 : values.length;
     }
@@ -284,7 +308,20 @@ public final class SignHelper {
     }
 
     static String splitArchiveDiagnostic(ManifestInfo manifest) {
-        if (manifest != null && manifest.isSplitRequired
+        if (manifest == null) {
+            return null;
+        }
+        if ((manifest.splitName != null && !manifest.splitName.isEmpty())
+                || manifest.isFeatureSplit
+                || (manifest.configForSplit != null && !manifest.configForSplit.isEmpty())) {
+            StringBuilder detail = new StringBuilder("This archive is a split APK");
+            if (manifest.splitName != null && !manifest.splitName.isEmpty()) {
+                detail.append(" (split=").append(manifest.splitName).append(')');
+            }
+            return detail.append("; PackageManager parses a standalone file as a base APK; "
+                    + "build from a universal APK or provide the complete split set").toString();
+        }
+        if (manifest.isSplitRequired
                 && (manifest.splitTypes == null || manifest.splitTypes.isEmpty())) {
             return "This is a split APK base requiring additional APK splits"
                     + (manifest.requiredSplitTypes == null || manifest.requiredSplitTypes.isEmpty()

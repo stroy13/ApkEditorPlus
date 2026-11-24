@@ -47,6 +47,12 @@ public class ManifestInfo {
     // Record all declared permissions
     public Set<String> permissions = new HashSet<>();
     // Split / packaging flags that decide whether a standalone APK can be installed.
+    // The framework parser treats a non-empty manifest "split" value as proof that
+    // this archive is a split, not a base APK. Keep that identity separate from
+    // the required/actual split-type metadata below.
+    public String splitName;
+    public String configForSplit;
+    public boolean isFeatureSplit;
     public boolean isSplitRequired;
     public String requiredSplitTypes;
     public String splitTypes;

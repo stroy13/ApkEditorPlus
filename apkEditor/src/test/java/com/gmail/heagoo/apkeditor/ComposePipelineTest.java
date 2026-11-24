@@ -125,6 +125,9 @@ public class ComposePipelineTest {
         assertTrue("the final gate must compare the framework package to the effective manifest",
                 signHelper.contains("Generated package mismatch")
                         && signHelper.contains("validateOutputWithAndroid(ctx, new File(targetApkPath), effectiveManifest"));
+        assertTrue("identity-only retry must distinguish metadata generation from archive parsing",
+                signHelper.contains("retrying with identity-only flags")
+                        && signHelper.contains("getPackageArchiveInfo(apk.getAbsolutePath(), 0)"));
         String legacy = runBody(read("ApkComposeThread.java"));
         assertTrue(legacy.contains("if (!signApk()) {"));
         assertTrue("unsigned builds still have to write the apk",

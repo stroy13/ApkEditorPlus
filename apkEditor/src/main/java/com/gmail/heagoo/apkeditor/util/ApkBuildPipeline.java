@@ -553,7 +553,12 @@ public final class ApkBuildPipeline {
     }
 
     private static boolean mustStore(String name, int targetSdkVersion) {
-        return name.equals("resources.arsc");
+        // resources.arsc must be stored and 4-byte aligned for target-R+ package
+        // parsing. Keep AndroidManifest.xml stored as a conservative compatibility
+        // policy too: some vendor PackageManager/asset-table implementations reject
+        // or fail to open compressed binary manifests even though ZipFile and apksig
+        // accept them. The independent framework parser gate still remains enabled.
+        return name.equals("AndroidManifest.xml") || name.equals("resources.arsc");
     }
 
     private static boolean isOldSignature(String name) {

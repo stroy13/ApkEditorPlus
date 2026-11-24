@@ -149,6 +149,8 @@ public class ApkBuildPipelineTest {
         ApkBuildPipeline.build(source, target, replaces, null, null, options(), null, null);
         assertTrue(target.isFile());
         try (ZipFile zip = new ZipFile(target)) {
+            assertEquals("binary manifest is kept uncompressed for PackageManager compatibility",
+                    ZipEntry.STORED, zip.getEntry("AndroidManifest.xml").getMethod());
             assertEquals(ZipEntry.STORED, zip.getEntry("resources.arsc").getMethod());
             assertEquals(ZipEntry.STORED, zip.getEntry("lib/arm64-v8a/libgame.so").getMethod());
             assertFalse("old signature must be stripped", zip.getEntry("META-INF/CERT.RSA") != null
