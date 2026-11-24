@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.io.StringWriter;
 import java.io.Writer;
 import java.util.Collection;
 import java.util.HashMap;
@@ -689,11 +690,9 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
                             dir.mkdirs();
                         }
                     }
-                    KXmlSerializer xmlSerializer = new KXmlSerializer();
                     File file2 = new File(file, path);
                     FileOutputStream fos = new FileOutputStream(file2);
                     Writer writer = new BufferedWriter(new OutputStreamWriter(fos, Encoding.DEFAULT_CHARSET_NAME), 32768);
-                    xmlSerializer.setOutput(writer);
                     writer.write("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");
                     writer.write("<resources>\n");
                     Set<ResResource> resources = valueFile.listResources();
@@ -701,16 +700,34 @@ public class ApkDecoderMine implements XmlDecoder.IReferenceDecoder, AXMLParser.
                         if (!valueFile.isSynthesized(res)) {
                             ResValuesXmlSerializable value = (ResValuesXmlSerializable) res.getValue();
                             if (value instanceof ResValuesXmlSerializable) {
+                                // Serialize each value into an isolated fragment.
+                                // If a malformed string-pool value throws after
+                                // opening <plurals> or <item>, writing directly to
+                                // the shared serializer leaves an unclosed tag in
+                                // plurals.xml and makes AAPT2 report a misleading
+                                // "mismatched tag" for an otherwise unchanged APK.
+                                StringWriter fragment = new StringWriter();
+                                KXmlSerializer valueSerializer = new KXmlSerializer();
                                 try {
-                                    value.serializeToResValuesXml(xmlSerializer, res);
+                                    valueSerializer.setOutput(fragment);
+                                    value.serializeToResValuesXml(valueSerializer, res);
+                                    valueSerializer.flush();
+                                    if (valueSerializer.getDepth() != 0) {
+                                        throw new IOException("Unbalanced XML fragment for " + res);
+                                    }
+                                    writer.write(fragment.toString());
+                                    writer.write("\n    ");
                                 } catch (Throwable e) {
                                     e.printStackTrace();
+                                    // Do not append a partial fragment. The
+                                    // enclosing <resources> document remains
+                                    // well-formed, and the build pipeline can
+                                    // report any genuinely missing value instead
+                                    // of failing with an unrelated XML mismatch.
                                 }
                             }
-                            xmlSerializer.ignorableWhitespace("\n    ");
                         }
                     }
-                    xmlSerializer.flush();
                     writer.write("</resources>\n");
                     writer.close();
                     fos.close();

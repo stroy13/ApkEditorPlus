@@ -39,6 +39,12 @@ public class ResAttrDecoderTest {
         assertEquals("stateAlwaysHidden|adjustResize",
                 decoder.decode(TypedValue.TYPE_STRING, 0, "0x13",
                         WINDOW_SOFT_INPUT_MODE, "windowSoftInputMode"));
+        assertEquals("persistRootOnly", decoder.decode(TypedValue.TYPE_STRING, 0, "0",
+                0x0101042d, "persistableMode"));
+        assertEquals("persistNever", decoder.decode(TypedValue.TYPE_STRING, 0, "1",
+                0x0101042d, "persistableMode"));
+        assertEquals("persistAcrossReboots", decoder.decode(TypedValue.TYPE_STRING, 0, "2",
+                0x0101042d, "persistableMode"));
         assertEquals("specialUse", decoder.decode(TypedValue.TYPE_STRING, 0,
                 "0x40000000", FOREGROUND_SERVICE_TYPE, "foregroundServiceType"));
         assertEquals("fileManagement|mediaProcessing|specialUse",

@@ -203,7 +203,7 @@ public class ResAttrDecoder {
                 return renderWindowSoftInputMode(scalar);
             case ANDROID_ATTR_PERSISTABLE_MODE:
                 return exact(scalar, new int[]{0, 1, 2},
-                        new String[]{"persistNever", "persistAcrossReboots", "persistRootOnly"});
+                        new String[]{"persistRootOnly", "persistNever", "persistAcrossReboots"});
             case ANDROID_ATTR_FOREGROUND_SERVICE_TYPE:
                 return renderFlags(scalar,
                         new int[]{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048,
