@@ -304,15 +304,20 @@ public final class SignHelper {
         try {
             // AssetManager's constructor is hidden on modern SDKs. Reflection keeps
             // this optional diagnostic from mutating Context.getAssets() and avoids
-            // taking a compile-time dependency on the hidden constructor.
+            // taking a compile-time dependency on hidden AssetManager APIs.
             assets = AssetManager.class.getDeclaredConstructor().newInstance();
-            int cookie = assets.addAssetPath(apk.getAbsolutePath());
+            java.lang.reflect.Method addAssetPath = AssetManager.class
+                    .getMethod("addAssetPath", String.class);
+            int cookie = ((Integer) addAssetPath.invoke(assets, apk.getAbsolutePath())).intValue();
             if (cookie == 0) {
                 return "addAssetPath returned 0";
             }
             XmlResourceParser parser = null;
             try {
-                parser = assets.openXmlResourceParser(cookie, "AndroidManifest.xml");
+                java.lang.reflect.Method openXmlResourceParser = AssetManager.class.getMethod(
+                        "openXmlResourceParser", int.class, String.class);
+                parser = (XmlResourceParser) openXmlResourceParser.invoke(
+                        assets, cookie, "AndroidManifest.xml");
                 while (parser.next() != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
                     // Consume the parser so malformed later chunks are not hidden.
                 }
@@ -327,7 +332,7 @@ public final class SignHelper {
         } finally {
             if (assets != null) {
                 try {
-                    assets.close();
+                    AssetManager.class.getMethod("close").invoke(assets);
                 } catch (Throwable ignored) {
                     // Diagnostic cleanup must not hide the original parse result.
                 }
