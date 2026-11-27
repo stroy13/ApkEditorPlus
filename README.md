@@ -1,4 +1,4 @@
-# APK Editor Plus v1.10.0.281
+# APK Editor Plus v1.10.0.282
 
 [![Сборка](https://github.com/stroy13/test_mod/actions/workflows/build.yml/badge.svg)](https://github.com/stroy13/test_mod/actions/workflows/build.yml)
 
