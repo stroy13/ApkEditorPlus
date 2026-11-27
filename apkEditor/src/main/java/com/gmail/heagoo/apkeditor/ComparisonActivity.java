@@ -350,6 +350,13 @@ public final class ComparisonActivity extends ThemedActivity implements FileSele
     public void updateLabels() {
         this.leftLabel.setText("Первый: " + (this.left == null ? "не выбран" : this.left));
         this.rightLabel.setText("Второй: " + (this.right != null ? this.right : "не выбран"));
+        updateSwapState();
+    }
+
+    private void updateSwapState() {
+        if (this.swap != null) {
+            this.swap.setEnabled(!this.busy && this.left != null && this.right != null);
+        }
     }
 
     private void choose(String side) {
@@ -412,7 +419,7 @@ public final class ComparisonActivity extends ThemedActivity implements FileSele
         this.chooseLeft.setEnabled(enable);
         this.chooseRight.setEnabled(enable);
         this.mode.setEnabled(enable);
-        this.swap.setEnabled(enable);
+        this.swap.setEnabled(enable && this.left != null && this.right != null);
         this.category.setEnabled(enable);
         this.search.setEnabled(enable);
     }

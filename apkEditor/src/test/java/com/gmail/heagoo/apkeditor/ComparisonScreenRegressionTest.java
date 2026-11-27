@@ -36,8 +36,12 @@ public class ComparisonScreenRegressionTest {
                 initialRefresh > listener);
         assertTrue("swap must explain why it cannot run without both sides",
                 src.contains("Выберите оба объекта, чтобы поменять их местами."));
-        assertTrue("swap remains visually outlined while showing that feedback",
-                src.contains("this.swap.setEnabled(enable);"));
+        assertTrue("swap must be disabled until both sides are selected",
+                src.contains("this.swap.setEnabled(!this.busy && this.left != null && this.right != null);"));
+        assertTrue("control changes must preserve the same disabled state",
+                src.contains("this.swap.setEnabled(enable && this.left != null && this.right != null);"));
+        assertTrue("swap state must be refreshed when labels change",
+                src.contains("updateSwapState();"));
         assertTrue("action buttons need a gap so their rounded lower borders are not overdrawn",
                 src.contains("int actionGap = dp(4.0f);"));
         assertTrue(src.contains("compareParams.setMargins(0, 0, actionGap, 0);"));
