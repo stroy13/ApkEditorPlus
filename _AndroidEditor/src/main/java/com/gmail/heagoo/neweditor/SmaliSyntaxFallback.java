@@ -220,7 +220,7 @@ final class SmaliSyntaxFallback {
         }
         char next = text.charAt(index + 1);
         return Character.isWhitespace(next) || "[]();{},:;".indexOf(next) >= 0
-                || isType(next);
+                || next == 'L' || isType(next);
     }
 
     private static boolean descriptorBoundary(String text, int index) {
