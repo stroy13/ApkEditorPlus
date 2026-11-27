@@ -15,7 +15,7 @@ import com.gmail.heagoo.apkeditor.base.R;
 import com.gmail.heagoo.apkeditor.ui.LayoutObListView;
 import com.gmail.heagoo.neweditor.ColorTheme;
 import com.gmail.heagoo.neweditor.Document;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 public class TextEditBigListHelper {
@@ -132,9 +132,36 @@ public class TextEditBigListHelper {
     }
 
     public void setText(String text) {
-        String[] lines = text.split("\\r?\\n");
-        this.adapter.setText(Arrays.asList(lines));
-        this.adapter.notifyDataSetChanged();
+        setText(splitLines(text));
+    }
+
+    public static List<String> splitLines(String text) {
+        ArrayList<String> result = new ArrayList<>();
+        if (text == null || text.length() == 0) {
+            result.add("");
+            return result;
+        }
+        int start = 0;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                int end = i;
+                if (end > start && text.charAt(end - 1) == '\r') {
+                    end--;
+                }
+                result.add(text.substring(start, end));
+                start = i + 1;
+            }
+        }
+        if (start < text.length()) {
+            int end = text.length();
+            if (end > start && text.charAt(end - 1) == '\r') {
+                end--;
+            }
+            result.add(text.substring(start, end));
+        } else if (text.charAt(text.length() - 1) == '\n') {
+            result.add("");
+        }
+        return result;
     }
 
     public void setText(List<String> lines) {
@@ -204,7 +231,11 @@ public class TextEditBigListHelper {
     }
 
     public void refresh() {
-        this.adapter.notifyDataSetChanged();
+        this.adapter.refresh();
+    }
+
+    public void close() {
+        this.adapter.close();
     }
 
     public TextEditBigListAdapter getAdapter() {

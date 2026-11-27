@@ -17,6 +17,7 @@ public class SmaliSyntaxTest {
         assertHas(spans, SmaliSyntax.REGISTER, "v1", line);
         assertHas(spans, SmaliSyntax.DESCRIPTOR, "Lcom/example/Thing;", line);
         assertHas(spans, SmaliSyntax.DESCRIPTOR, "Ljava/lang/String;", line);
+        assertHas(spans, SmaliSyntax.KEYWORD_TYPE, "I", line);
         assertHas(spans, SmaliSyntax.KEYWORD_TYPE, "V", line);
         assertHas(spans, SmaliSyntax.COMMENT, "# note", line);
     }
@@ -34,6 +35,10 @@ public class SmaliSyntaxTest {
                 SmaliSyntax.STRING, "\"hello\"", "    const-string v0, \"hello\"");
         assertHas(SmaliSyntax.tokenize("    .field value:Lcom/example/Thing;"),
                 SmaliSyntax.DESCRIPTOR, "Lcom/example/Thing;", "    .field value:Lcom/example/Thing;");
+        assertHas(SmaliSyntax.tokenize("    invoke-static {[Ljava/lang/String;}, LExample;->run([I)V"),
+                SmaliSyntax.DESCRIPTOR, "Ljava/lang/String;", "    invoke-static {[Ljava/lang/String;}, LExample;->run([I)V");
+        assertHas(SmaliSyntax.tokenize("    invoke-static {[Ljava/lang/String;}, LExample;->run([I)V"),
+                SmaliSyntax.KEYWORD_TYPE, "I", "    invoke-static {[Ljava/lang/String;}, LExample;->run([I)V");
     }
 
     private static void assertHas(List<SmaliSyntax.Span> spans, int token, String value, String line) {

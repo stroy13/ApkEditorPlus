@@ -121,8 +121,7 @@ final class SmaliSyntaxFallback {
                     continue;
                 }
             }
-            if (isType(c) && boundary(line, i)
-                    && (i + 1 == n || !nameChar(line.charAt(i + 1)))) {
+            if (isType(c) && typeBoundary(line, i)) {
                 add(spans, offset, i, i + 1, KEYWORD_TYPE, colors, line);
                 i++;
                 continue;
@@ -209,7 +208,19 @@ final class SmaliSyntaxFallback {
             return true;
         }
         char previous = text.charAt(index - 1);
-        return Character.isWhitespace(previous) || "{[(,=;:)]".indexOf(previous) >= 0;
+        return Character.isWhitespace(previous) || "{[(,=;:)]>".indexOf(previous) >= 0;
+    }
+
+    private static boolean typeBoundary(String text, int index) {
+        if (!boundary(text, index)) {
+            return false;
+        }
+        if (index + 1 == text.length()) {
+            return true;
+        }
+        char next = text.charAt(index + 1);
+        return Character.isWhitespace(next) || "[]();{},:;".indexOf(next) >= 0
+                || isType(next);
     }
 
     private static boolean descriptorBoundary(String text, int index) {

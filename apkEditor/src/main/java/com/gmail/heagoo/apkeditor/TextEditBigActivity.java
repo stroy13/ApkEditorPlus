@@ -99,6 +99,14 @@ public class TextEditBigActivity extends TextEditBase implements View.OnClickLis
         super.onStop();
     }
 
+    @Override
+    protected void onDestroy() {
+        if (this.textEditor != null) {
+            this.textEditor.close();
+        }
+        super.onDestroy();
+    }
+
     private void debug(String format, Object... args) {
     }
 
@@ -794,6 +802,7 @@ public class TextEditBigActivity extends TextEditBase implements View.OnClickLis
     private class TextLoader extends AsyncTask<Void, Integer, Boolean> {
         private String curFilePath;
         private boolean htmlAvailable;
+        private List<String> loadedLines;
         private boolean loadSucceed;
         private String syntaxFileName;
 
@@ -835,6 +844,9 @@ public class TextEditBigActivity extends TextEditBase implements View.OnClickLis
                     document.load(TextEditBigActivity.this, this.curFilePath, R.string.error_file_too_big);
                 }
                 TextEditBigActivity.this.curDocument = document;
+                // Split off the UI thread. Large-file mode must not spend the
+                // first frame running a regex over the complete document.
+                this.loadedLines = TextEditBigListHelper.splitLines(document.getText());
                 this.loadSucceed = true;
             } catch (IOException e) {
                 this.loadSucceed = false;
@@ -848,8 +860,7 @@ public class TextEditBigActivity extends TextEditBase implements View.OnClickLis
             if (this.loadSucceed) {
                 TextEditBigActivity.this.textLoaded = true;
                 TextEditBigActivity.this.textEditor.setDocument(TextEditBigActivity.this.curDocument);
-                String strContent = TextEditBigActivity.this.curDocument.getText();
-                TextEditBigActivity.this.textEditor.setText(strContent);
+                TextEditBigActivity.this.textEditor.setText(this.loadedLines);
                 TextEditBigActivity.this.updateLineCount();
                 TextEditBigActivity.this.updateSaveState();
                 return;

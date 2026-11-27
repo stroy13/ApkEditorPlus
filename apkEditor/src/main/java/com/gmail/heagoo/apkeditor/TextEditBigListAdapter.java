@@ -2,6 +2,7 @@ package com.gmail.heagoo.apkeditor;
 
 import android.content.Context;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -17,9 +18,19 @@ import com.gmail.heagoo.apkeditor.ui.EditTextRememberCursor;
 import com.gmail.heagoo.apkeditor.ui.LayoutObListView;
 import com.gmail.heagoo.neweditor.ColorTheme;
 import com.gmail.heagoo.neweditor.Document;
+import com.gmail.heagoo.neweditor.SyntaxSnapshot;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 
 public class TextEditBigListAdapter extends BaseAdapter {
     private int complexUnitSp;
@@ -38,11 +49,127 @@ public class TextEditBigListAdapter extends BaseAdapter {
     private int selectedLine = -1;
     private boolean bShowLineNumbers = true;
     private MyHandler handler = new MyHandler();
-    private List<String> lines = new ArrayList();
+    private final Handler syntaxUi = new Handler(Looper.getMainLooper());
+    private final ExecutorService syntaxWorker = Executors.newSingleThreadExecutor(new ThreadFactory() {
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "big-editor-syntax");
+            thread.setDaemon(true);
+            return thread;
+        }
+    });
+    private final AtomicInteger syntaxRevision = new AtomicInteger();
+    private final Map<Integer, SyntaxSnapshot> highlightedLines = new LinkedHashMap<Integer, SyntaxSnapshot>(256, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Integer, SyntaxSnapshot> eldest) {
+            return size() > 256;
+        }
+    };
+    private final Set<Integer> highlightPending = new HashSet<>();
+    private volatile boolean closed;
+    private List<String> lines = new ArrayList<>();
 
     public TextEditBigListAdapter(Context ctx, LayoutObListView list) {
         this.ctx = ctx;
         this.listRef = new WeakReference<>(list);
+    }
+
+    private void invalidateSyntax() {
+        this.syntaxRevision.incrementAndGet();
+        this.highlightedLines.clear();
+        this.highlightPending.clear();
+    }
+
+    private void requestSyntaxHighlight(final int position, final String source) {
+        final Document doc = this.document;
+        if (this.closed || doc == null || position < 0 || position >= this.lines.size()) {
+            return;
+        }
+        SyntaxSnapshot cached = this.highlightedLines.get(Integer.valueOf(position));
+        if (cached != null) {
+            applySyntaxHighlight(position, cached);
+            return;
+        }
+        final Integer key = Integer.valueOf(position);
+        if (!this.highlightPending.add(key)) {
+            return;
+        }
+        final int expected = this.syntaxRevision.get();
+        this.syntaxWorker.execute(new Runnable() {
+            @Override
+            public void run() {
+                SyntaxSnapshot parsed = null;
+                try {
+                    parsed = doc.syntaxSnapshot(source, new BooleanSupplier() {
+                        @Override
+                        public boolean getAsBoolean() {
+                            return TextEditBigListAdapter.this.closed
+                                    || TextEditBigListAdapter.this.syntaxRevision.get() != expected;
+                        }
+                    });
+                } catch (RuntimeException ignored) {
+                }
+                final SyntaxSnapshot ready = parsed;
+                TextEditBigListAdapter.this.syntaxUi.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        TextEditBigListAdapter.this.finishSyntaxHighlight(position, source, expected, ready);
+                    }
+                });
+            }
+        });
+    }
+
+    private void finishSyntaxHighlight(int position, String source, int expected,
+                                       SyntaxSnapshot snapshot) {
+        if (this.closed || this.syntaxRevision.get() != expected) {
+            return;
+        }
+        this.highlightPending.remove(Integer.valueOf(position));
+        if (snapshot == null || position >= this.lines.size()
+                || !source.equals(this.lines.get(position))) {
+            return;
+        }
+        this.highlightedLines.put(Integer.valueOf(position), snapshot);
+        applySyntaxHighlight(position, snapshot);
+    }
+
+    private void applySyntaxHighlight(int position, SyntaxSnapshot snapshot) {
+        LayoutObListView list = this.listRef.get();
+        if (list == null) {
+            return;
+        }
+        int first = list.getFirstVisiblePosition();
+        for (int childIndex = 0; childIndex < list.getChildCount(); childIndex++) {
+            if (first + childIndex != position) {
+                continue;
+            }
+            View child = list.getChildAt(childIndex);
+            Object tag = child.getTag();
+            if (!(tag instanceof ViewHolder)) {
+                return;
+            }
+            ViewHolder holder = (ViewHolder) tag;
+            Object rowPosition = holder.et.getTag(R.id.text);
+            if (!(rowPosition instanceof Integer)
+                    || ((Integer) rowPosition).intValue() != position) {
+                return;
+            }
+            String current = holder.et.getText().toString();
+            if (position >= this.lines.size() || !current.equals(this.lines.get(position))) {
+                return;
+            }
+            this.document.applySyntaxSnapshot(holder.et.getText(), snapshot);
+            return;
+        }
+    }
+
+    public void close() {
+        this.closed = true;
+        this.syntaxRevision.incrementAndGet();
+        this.highlightPending.clear();
+        this.syntaxUi.removeCallbacksAndMessages(null);
+        this.syntaxWorker.shutdownNow();
     }
 
     public void setSelectionChangedListener(SelectionChangedListener selectionChangedListener) {
@@ -101,17 +228,20 @@ public class TextEditBigListAdapter extends BaseAdapter {
             viewHolder.lineTv.setVisibility(8);
             viewHolder.divider.setVisibility(8);
         }
+        String source = this.lines.get(position);
         viewHolder.et.setTextColor(this.textColor);
-        viewHolder.et.setText(this.lines.get(position));
+        viewHolder.et.setText(source);
         if (this.fontSize > 0.0f) {
             viewHolder.lineTv.setTextSize(this.complexUnitSp, this.fontSize);
             viewHolder.et.setTextSize(this.complexUnitSp, this.fontSize);
         }
-        if (this.document != null) {
-            this.document.syntaxHighlight(viewHolder.et);
-        }
         viewHolder.et.setTag(R.id.text, Integer.valueOf(position));
         viewHolder.et.setParent(this.ctx, this.listRef);
+        if (this.document != null) {
+            this.document.clearSyntaxHighlighting(viewHolder.et.getText(), 0,
+                    viewHolder.et.getText().length());
+            requestSyntaxHighlight(position, source);
+        }
         viewHolder.et.selectionClickable();
         applyRowColors(viewHolder, position);
         viewHolder.et.setOnFocusChangeListener(new View.OnFocusChangeListener() {
@@ -206,6 +336,11 @@ public class TextEditBigListAdapter extends BaseAdapter {
         this.fontSize = fontSize;
     }
 
+    public void refresh() {
+        invalidateSyntax();
+        notifyDataSetChanged();
+    }
+
     public CharSequence getText() {
         StringBuilder sb = new StringBuilder();
         if (this.lines.size() > 0) {
@@ -220,11 +355,12 @@ public class TextEditBigListAdapter extends BaseAdapter {
 
     public void setText(List<String> text) {
         this.selectedLine = -1;
-        this.lines.clear();
-        for (String line : text) {
-            this.lines.add(line);
+        invalidateSyntax();
+        this.lines = text == null ? new ArrayList<>() : text;
+        LayoutObListView list = this.listRef.get();
+        if (list != null) {
+            list.resetSelection();
         }
-        this.listRef.get().resetSelection();
     }
 
     public List<String> getTextLines() {
@@ -233,6 +369,7 @@ public class TextEditBigListAdapter extends BaseAdapter {
 
     public void setDocument(Document document) {
         this.document = document;
+        invalidateSyntax();
     }
 
     public void setTextColor(int textColor) {
@@ -319,7 +456,10 @@ public class TextEditBigListAdapter extends BaseAdapter {
                 return;
             }
             if (this.position < TextEditBigListAdapter.this.lines.size()) {
-                TextEditBigListAdapter.this.lines.set(this.position, s.toString());
+                String updated = s.toString();
+                TextEditBigListAdapter.this.lines.set(this.position, updated);
+                TextEditBigListAdapter.this.invalidateSyntax();
+                TextEditBigListAdapter.this.requestSyntaxHighlight(this.position, updated);
             }
             if (TextEditBigListAdapter.this.textChangeListener != null) {
                 TextEditBigListAdapter.this.textChangeListener.afterTextChanged(s);

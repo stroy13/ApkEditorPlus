@@ -85,10 +85,21 @@ public final class AsyncSyntaxController {
         }
         this.pending = true;
         final int expected = this.revision.get();
-        final String text = this.editor.getText().toString();
+        // Keep the UI-thread handoff to a cheap buffer reference. Copying the
+        // complete editor contents belongs on the syntax worker; doing
+        // Editable.toString() here made opening a borderline-large file block
+        // the main looper before the async parser even started.
+        final CharSequence source = this.editor.getText();
         this.worker.execute(new Runnable() {
             @Override
             public final void run() {
+                if (AsyncSyntaxController.this.m375x8461ba02(expected)) {
+                    return;
+                }
+                final String text = source == null ? "" : source.toString();
+                if (AsyncSyntaxController.this.m375x8461ba02(expected)) {
+                    return;
+                }
                 AsyncSyntaxController.this.m377x67b50640(text, expected);
             }
         });

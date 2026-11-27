@@ -312,8 +312,39 @@ public class Document implements Serializable {
         }
     }
 
+    public void applySyntaxSnapshot(Spannable spannable, SyntaxSnapshot snapshot) {
+        clearSyntaxHighlighting(spannable, 0, spannable.length());
+        if (snapshot == null) {
+            return;
+        }
+        for (SyntaxSnapshot.Line line : snapshot.lines) {
+            for (SyntaxSnapshot.Span span : line.spans) {
+                int start = Math.max(0, span.start);
+                int end = Math.min(spannable.length(), span.end);
+                if (end > start) {
+                    setSpan(spannable, new SyntaxHighlightSpan(span.color), start, end, 33);
+                }
+            }
+        }
+    }
+
+    private void highlightSmaliSpannable(Spannable spannable) {
+        applySyntaxSnapshot(spannable, syntaxSnapshot(spannable.toString(),
+                new BooleanSupplier() {
+                    @Override
+                    public boolean getAsBoolean() {
+                        return false;
+                    }
+                }));
+    }
+
     public void syntaxHighlight(EditText textEditor) {
         try {
+            Spannable spannable = textEditor.getText();
+            if ("smali.xml".equals(this.syntaxName)) {
+                highlightSmaliSpannable(spannable);
+                return;
+            }
             if (this.mTokenMarker == null) {
                 if (this.clearNext) {
                     clearSyntaxHighlighting(textEditor);
@@ -321,7 +352,6 @@ public class Document implements Serializable {
                 this.clearNext = false;
                 return;
             }
-            Spannable spannable = textEditor.getText();
             String[] lines = spannable.toString().split("\n");
             Segment segment = new Segment();
             TokenMarker.LineContext lastTokenType = null;

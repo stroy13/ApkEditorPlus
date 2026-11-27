@@ -128,6 +128,15 @@ public final class ComparisonActivity extends ThemedActivity implements FileSele
         help.setText("?");
         help.setMinWidth(0);
         help.setMinimumWidth(0);
+        int actionBackground = com.gmail.heagoo.apkeditor.base.R.drawable.comparison_action_background;
+        this.go.setBackgroundResource(actionBackground);
+        this.swap.setBackgroundResource(actionBackground);
+        help.setBackgroundResource(actionBackground);
+        this.go.setBackgroundTintList(null);
+        this.swap.setBackgroundTintList(null);
+        help.setBackgroundTintList(null);
+        actions.setClipChildren(false);
+        actions.setClipToPadding(false);
         int actionGap = dp(4.0f);
         LinearLayout.LayoutParams compareParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
         compareParams.setMargins(0, 0, actionGap, 0);

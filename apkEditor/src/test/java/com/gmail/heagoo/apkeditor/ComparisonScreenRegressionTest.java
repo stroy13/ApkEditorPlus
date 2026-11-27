@@ -46,6 +46,35 @@ public class ComparisonScreenRegressionTest {
                 src.contains("int actionGap = dp(4.0f);"));
         assertTrue(src.contains("compareParams.setMargins(0, 0, actionGap, 0);"));
         assertTrue(src.contains("swapParams.setMargins(0, 0, actionGap, 0);"));
+        assertTrue(src.contains("comparison_action_background"));
+        assertTrue(src.contains("actions.setClipChildren(false);"));
+        assertTrue(src.contains("setBackgroundTintList(null)"));
+        String actionBackground = read("apkEditor/src/main/res/drawable/comparison_action_background.xml");
+        assertTrue(actionBackground.contains("android:state_enabled=\"false\""));
+        assertTrue(actionBackground.contains("android:radius=\"10dp\""));
+    }
+
+    @Test
+    public void largeSmaliEditorDoesNotSplitOrHighlightOnTheUiThread() throws Exception {
+        String helper = read("apkEditor/src/main/java/com/gmail/heagoo/apkeditor/TextEditBigListHelper.java");
+        assertTrue(helper.contains("public static List<String> splitLines(String text)"));
+        assertTrue(helper.contains("text.charAt(i) == '\\n'"));
+        String loader = read("apkEditor/src/main/java/com/gmail/heagoo/apkeditor/TextEditBigActivity.java");
+        assertTrue(loader.contains("TextEditBigListHelper.splitLines(document.getText())"));
+        assertTrue(loader.contains("textEditor.setText(this.loadedLines)"));
+        String adapter = read("apkEditor/src/main/java/com/gmail/heagoo/apkeditor/TextEditBigListAdapter.java");
+        assertTrue(adapter.contains("this.lines = text == null ? new ArrayList<>() : text;"));
+        assertTrue(adapter.contains("newSingleThreadExecutor"));
+        assertTrue(adapter.contains("doc.syntaxSnapshot(source"));
+        assertTrue(adapter.contains("document.applySyntaxSnapshot"));
+        assertTrue(!adapter.contains("document.syntaxHighlight(viewHolder.et)"));
+        String document = read("_AndroidEditor/src/main/java/com/gmail/heagoo/neweditor/Document.java");
+        assertTrue(document.contains("highlightSmaliSpannable(spannable)"));
+        assertTrue(document.contains("public void applySyntaxSnapshot"));
+        String controller = read("_AndroidEditor/src/main/java/com/gmail/heagoo/neweditor/AsyncSyntaxController.java");
+        assertTrue(controller.contains("final CharSequence source = this.editor.getText();"));
+        assertTrue(controller.contains("final String text = source == null ? \"\" : source.toString();"));
+        assertTrue(!controller.contains("final String text = this.editor.getText().toString();"));
     }
 
     @Test

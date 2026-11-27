@@ -110,8 +110,7 @@ public final class SmaliSyntax {
                     continue;
                 }
             }
-            if (isType(c) && isBoundary(text, i)
-                    && (i + 1 == n || !isNameChar(text.charAt(i + 1)))) {
+            if (isType(c) && isTypeBoundary(text, i)) {
                 add(result, i, i + 1, KEYWORD_TYPE);
                 i++;
                 continue;
@@ -192,7 +191,19 @@ public final class SmaliSyntax {
             return true;
         }
         char previous = text.charAt(index - 1);
-        return Character.isWhitespace(previous) || "{[(,=;:)]".indexOf(previous) >= 0;
+        return Character.isWhitespace(previous) || "{[(,=;:)]>".indexOf(previous) >= 0;
+    }
+
+    private static boolean isTypeBoundary(String text, int index) {
+        if (!isBoundary(text, index)) {
+            return false;
+        }
+        if (index + 1 == text.length()) {
+            return true;
+        }
+        char next = text.charAt(index + 1);
+        return Character.isWhitespace(next) || "[]();{},:;".indexOf(next) >= 0
+                || isType(next);
     }
 
     private static boolean isDescriptorBoundary(String text, int index) {
