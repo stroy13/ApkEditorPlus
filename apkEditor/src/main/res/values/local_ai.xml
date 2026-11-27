@@ -22,6 +22,7 @@
     <string name="ai_gemma4_confirm_title">Download Gemma 4 E2B (INT4)?</string>
     <string name="ai_gemma4_confirm">Download about 2.6 GB over HTTPS in two verified parts? Allow at least 5.5 GB free storage during parallel setup and about 4 GB working memory. The model is stored privately and runs offline. Gemma Terms apply. The checksummed model parts are mirrored by a third party; APK Editor Plus is not affiliated with Google.</string>
     <string name="ai_download_4gb">Download Gemma 4 E4B (3.7 GB)</string>
+    <string name="ai_model_installed">✓ %1$s — already downloaded</string>
     <string name="ai_gemma4_e4b_confirm_title">Download Gemma 4 E4B INT4 (3.7 GB)?</string>
     <string name="ai_gemma4_e4b_confirm">This larger model is about 3.66 GB and is downloaded in two SHA-256-verified parts. Parallel download and verification need about 8 GB free storage temporarily; the model is intended for devices with at least 12 GB RAM. It runs locally and offline. Gemma Terms apply. The files are from a third-party mirror; APK Editor Plus is not affiliated with Google.</string>
     <string name="ai_delete">Delete an imported model</string>

@@ -210,18 +210,47 @@ public class SettingActivity extends ThemedPreferenceActivity implements Prefere
     }
 
     private void showLocalAiModelMenu() {
-        cardChoices(getString(R.string.ai_models), new String[]{getString(R.string.ai_download), getString(R.string.ai_download_stronger),
-                        getString(R.string.ai_download_4gb), getString(R.string.ai_import), getString(R.string.ai_select_model)}, (dialog, which) -> {
-                    if (which == 0) confirmRecommendedModelDownload();
-                    else if (which == 1) confirmGemma4Download();
-                    else if (which == 2) confirmGemma4E4BDownload();
-                    else if (which == 3) {
+        final int gemma3 = com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.MODEL_GEMMA3_1B;
+        final int gemma4E2B = com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.MODEL_GEMMA4_E2B;
+        final int gemma4E4B = com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.MODEL_GEMMA4_E4B;
+        String[] labels = new String[]{
+                modelDownloadLabel(gemma3, R.string.ai_download),
+                modelDownloadLabel(gemma4E2B, R.string.ai_download_stronger),
+                modelDownloadLabel(gemma4E4B, R.string.ai_download_4gb),
+                getString(R.string.ai_import),
+                getString(R.string.ai_select_model)};
+        cardChoices(getString(R.string.ai_models), labels, (dialog, which) -> {
+                    if (which == 0) {
+                        if (selectDownloadedModel(gemma3)) dialog.dismiss();
+                        else confirmRecommendedModelDownload();
+                    } else if (which == 1) {
+                        if (selectDownloadedModel(gemma4E2B)) dialog.dismiss();
+                        else confirmGemma4Download();
+                    } else if (which == 2) {
+                        if (selectDownloadedModel(gemma4E4B)) dialog.dismiss();
+                        else confirmGemma4E4BDownload();
+                    } else if (which == 3) {
                         Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                         pick.addCategory(Intent.CATEGORY_OPENABLE);
                         pick.setType("*/*");
                         startActivityForResult(pick, 9274);
                     } else chooseInstalledLocalModel();
                 }).setNegativeButton(android.R.string.cancel, null).show();
+    }
+
+    private String modelDownloadLabel(int model, int labelRes) {
+        String label = getString(labelRes);
+        return com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.isDownloaded(this, model)
+                ? getString(R.string.ai_model_installed, label) : label;
+    }
+
+    private boolean selectDownloadedModel(int model) {
+        java.io.File file = com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.downloaded(this, model);
+        if (file == null || !com.gmail.heagoo.apkeditor.translate.LocalLlmModelStore.select(this, file.getName())) {
+            return false;
+        }
+        android.widget.Toast.makeText(this, R.string.ai_model_downloaded, android.widget.Toast.LENGTH_SHORT).show();
+        return true;
     }
 
     private void chooseInstalledLocalModel() {

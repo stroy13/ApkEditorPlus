@@ -17,6 +17,19 @@ public class LocalModelStoreTest {
         assertEquals(2588147712L, LocalLlmModelStore.GEMMA4_E2B_BYTES);
     }
 
+    @Test public void recognizesOnlyCompletedBuiltInModelFiles() {
+        assertTrue(LocalLlmModelStore.isBuiltInModelFile(
+                LocalLlmModelStore.MODEL_GEMMA3_1B, "gemma3-1b-int4-a1b2c3d4.litertlm"));
+        assertTrue(LocalLlmModelStore.isBuiltInModelFile(
+                LocalLlmModelStore.MODEL_GEMMA4_E2B, "gemma4-e2b-int4-a1b2c3d4.litertlm"));
+        assertTrue(LocalLlmModelStore.isBuiltInModelFile(
+                LocalLlmModelStore.MODEL_GEMMA4_E4B, "gemma4-e4b-int4-a1b2c3d4.litertlm"));
+        assertFalse(LocalLlmModelStore.isBuiltInModelFile(
+                LocalLlmModelStore.MODEL_GEMMA3_1B, "gemma3-1b-int4-a1b2c3d4.partial"));
+        assertFalse(LocalLlmModelStore.isBuiltInModelFile(
+                LocalLlmModelStore.MODEL_GEMMA3_1B, "my-imported-model.litertlm"));
+    }
+
     @Test public void importsWithoutOverwriting() throws Exception {
         byte[] data = new byte[]{'G','G','U','F',3,0,0,0,1,2,3};
         java.io.File a = LocalModelStore.importModel(new ByteArrayInputStream(data), folder.getRoot());
