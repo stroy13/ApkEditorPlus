@@ -109,6 +109,38 @@ public class ComposePipelineTest {
     }
 
     @Test
+    public void fullComposeCollectsEveryDecodedPayloadAreaWithoutAmbiguousOverwrite() throws Exception {
+        String full = read("ApkComposeThreadNew.java");
+        for (String[] area : new String[][]{
+                {"assetsDir", "assets/"}, {"libDir", "lib/"}, {"libsDir", "libs/"},
+                {"kotlinDir", "kotlin/"}, {"unknownDir", ""}}) {
+            assertTrue("full compose must collect " + area[0],
+                    full.contains("collectFiles(filesToAdd, " + area[0] + ", \""
+                            + area[1] + "\");"));
+        }
+        assertTrue(full.contains("collectDexFiles(filesToAdd);"));
+        assertTrue(full.contains("Ambiguous decoded APK entry"));
+        assertTrue(full.contains("Cannot scan decoded directory"));
+    }
+
+    @Test
+    public void nativeZipPathsVerifyEntryPreservation() throws Exception {
+        String legacy = read("ApkComposeThread.java");
+        assertTrue("standard resource merge must check entries lost by void native API",
+                legacy.contains("validateMergedArchive();")
+                        && legacy.contains("Native ZIP merge dropped original entry"));
+        assertTrue("unsigned native modification must check entries before publication",
+                legacy.contains("validateModifiedArchive(nativeOutput);")
+                        && legacy.contains("Native ZIP modify dropped source entry")
+                        && legacy.contains("ApkBuildPipeline.atomicReplace(nativeOutput, target)"));
+        assertTrue("stale decoded mappings must be validated before native ZIP calls",
+                legacy.contains("ApkBuildPipeline.validateEntryMappings"));
+        assertTrue("native ZIP operations must validate source entry sets before writing",
+                legacy.contains("ApkBuildPipeline.validateSourceEntrySets(new File(this.tempApkPath)")
+                        && legacy.contains("ApkBuildPipeline.validateResourceArchive(new File(this.tempApkPath))"));
+    }
+
+    @Test
     public void signingStageActuallySigns() throws Exception {
         String freshSource = read("ApkComposeThreadNew.java");
         String fresh = runBody(freshSource);
@@ -125,6 +157,12 @@ public class ComposePipelineTest {
         assertTrue("the final gate must compare the framework package to the effective manifest",
                 signHelper.contains("Generated package mismatch")
                         && signHelper.contains("validateOutputWithAndroid(ctx, new File(targetApkPath), effectiveManifest"));
+        assertTrue("identity-only retry must distinguish metadata generation from archive parsing",
+                signHelper.contains("retrying with identity-only flags")
+                        && signHelper.contains("getPackageArchiveInfo(apk.getAbsolutePath(), 0)"));
+        assertTrue("a parser rejection must include native asset and legacy-parser diagnostics",
+                signHelper.contains("assetManagerDiagnostic(apk)")
+                        && signHelper.contains("legacyPackageParserDiagnostic(apk)"));
         String legacy = runBody(read("ApkComposeThread.java"));
         assertTrue(legacy.contains("if (!signApk()) {"));
         assertTrue("unsigned builds still have to write the apk",

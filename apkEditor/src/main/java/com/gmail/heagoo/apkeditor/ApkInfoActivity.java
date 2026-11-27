@@ -2746,7 +2746,6 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
         String targetApkPath = createOutputPath(this.apkPath, outputDir, FileUtil.reviseFileName(filename));
         Intent intent = new Intent((Context) this, (Class<?>) ApkComposeService.class);
         ActivityUtil.attachParam(intent, "decodeRootPath", this.decodeRootPath);
-        ActivityUtil.attachParam(intent, "originalApkPath", this.apkPath);
         if (!this.isFullDecoding) {
             ActivityUtil.attachParam(intent, "srcApkPath", this.apkPath);
         }
@@ -2777,9 +2776,9 @@ public class ApkInfoActivity extends CustomizedLangActivity implements AdapterVi
             String filepath = SDCard.makeWorkingDir(this) + RandomUtil.getRandomString(8);
             BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(filepath));
             for (Map.Entry<String, String> entry : fileEntry2ZipEntry2.entrySet()) {
-                bos.write(entry.getKey().getBytes());
+                bos.write(entry.getKey().getBytes(StandardCharsets.UTF_8));
                 bos.write(10);
-                bos.write(entry.getValue().getBytes());
+                bos.write(entry.getValue().getBytes(StandardCharsets.UTF_8));
                 bos.write(10);
             }
             bos.close();

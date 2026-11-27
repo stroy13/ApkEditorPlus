@@ -12,6 +12,9 @@ import java.util.UUID;
 public final class LocalLlmModelStore {
     private static final String PREFS = "local_litert_lm";
     private static final String SELECTED = "selected_model";
+    public static final int MODEL_GEMMA3_1B = 0;
+    public static final int MODEL_GEMMA4_E2B = 1;
+    public static final int MODEL_GEMMA4_E4B = 2;
     public static final long RECOMMENDED_MODEL_BYTES = 584417280L;
     public static final String RECOMMENDED_MODEL_SHA256 = "1325ae366d31950f137c9c357b9fa89448b176d76998180c08ceaca78bba98be";
     public static final String RECOMMENDED_MODEL_URL = "https://github.com/topoteretes/LiteRT-LM/releases/download/model-gemma3-1b-it-int4-v1/gemma3-1b-it-int4.litertlm";
@@ -48,6 +51,37 @@ public final class LocalLlmModelStore {
         if (files == null) return new File[0];
         java.util.Arrays.sort(files, java.util.Comparator.comparing(File::getName));
         return files;
+    }
+
+    /** Returns an installed file created by one of the built-in download options. */
+    public static File downloaded(Context context, int model) {
+        String prefix = modelPrefix(model);
+        if (prefix == null) return null;
+        File current = selected(context);
+        if (current != null && isBuiltInModelFile(model, current.getName())) return current;
+        for (File file : available(context)) {
+            if (isBuiltInModelFile(model, file.getName())) return file;
+        }
+        return null;
+    }
+
+    public static boolean isDownloaded(Context context, int model) {
+        return downloaded(context, model) != null;
+    }
+
+    static String modelPrefix(int model) {
+        switch (model) {
+            case MODEL_GEMMA3_1B: return "gemma3-1b-int4-";
+            case MODEL_GEMMA4_E2B: return "gemma4-e2b-int4-";
+            case MODEL_GEMMA4_E4B: return "gemma4-e4b-int4-";
+            default: return null;
+        }
+    }
+
+    static boolean isBuiltInModelFile(int model, String fileName) {
+        String prefix = modelPrefix(model);
+        return prefix != null && fileName != null
+                && fileName.startsWith(prefix) && fileName.endsWith(".litertlm");
     }
 
     public static boolean select(Context context, String fileName) {

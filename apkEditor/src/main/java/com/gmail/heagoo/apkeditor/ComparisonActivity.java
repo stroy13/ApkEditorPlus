@@ -31,6 +31,7 @@ import com.gmail.heagoo.apkeditor.ComparisonCore;
 import com.gmail.heagoo.apkeditor.ComparisonDiffDialog;
 import com.gmail.heagoo.apkeditor.ComparisonPresentation;
 import com.gmail.heagoo.apkeditor.FileSelectDialog;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -230,6 +231,10 @@ public final class ComparisonActivity extends ThemedActivity implements FileSele
         boolean auto = state == null && getIntent().getBooleanExtra(EXTRA_RUN, false) && this.left != null && this.right != null;
         this.mode.setSelection(requested, false);
         this.mode.setOnItemSelectedListener(new AnonymousClass3(requested, auto));
+        // Keep the empty state useful even when Spinner does not emit its first
+        // selection callback. Without this, the area below the action buttons is
+        // blank until the user changes a control.
+        m158lambda$new$0$comgmailheagooapkeditorComparisonActivity();
     }
 
     void m159lambda$onCreate$1$comgmailheagooapkeditorComparisonActivity(View v) {
@@ -335,6 +340,11 @@ public final class ComparisonActivity extends ThemedActivity implements FileSele
     public void updateLabels() {
         this.leftLabel.setText("Первый: " + (this.left == null ? "не выбран" : this.left));
         this.rightLabel.setText("Второй: " + (this.right != null ? this.right : "не выбран"));
+        if (!this.busy && this.swap != null) {
+            // Swapping an incomplete pair is a no-op; do not present it as an
+            // available action on the empty start screen.
+            this.swap.setEnabled(this.left != null && this.right != null);
+        }
     }
 
     private void choose(String side) {
@@ -397,7 +407,7 @@ public final class ComparisonActivity extends ThemedActivity implements FileSele
         this.chooseLeft.setEnabled(enable);
         this.chooseRight.setEnabled(enable);
         this.mode.setEnabled(enable);
-        this.swap.setEnabled(enable);
+        this.swap.setEnabled(enable && this.left != null && this.right != null);
         this.category.setEnabled(enable);
         this.search.setEnabled(enable);
     }
@@ -635,126 +645,95 @@ public final class ComparisonActivity extends ThemedActivity implements FileSele
     }
 
     void m167lambda$open$12$comgmailheagooapkeditorComparisonActivity(ComparisonCore.Result selected, final ComparisonCore.Entry entry) {
-        ComparisonCore.Diff d;
-        String ltext;
-        String rtext;
-        File index;
-        long count;
-        String error;
-        boolean decodedXml;
-        ComparisonCore.Diff d2 = null;
-        String ltext2 = null;
-        String rtext2 = null;
-        File index2 = null;
-        long count2 = 0;
-        boolean decodedXml2 = false;
+        ComparisonCore.Diff diff = null;
+        String leftText = null;
+        String rightText = null;
+        File binary = null;
+        long changes = 0;
+        String failure = null;
+        boolean decodedXml = false;
         try {
-            try {
-            } catch (Exception e) {
-                if (!this.cancelled && !this.destroyed) {
-                    ltext2 = null;
-                    rtext2 = null;
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public final void run() {
-                            ComparisonActivity.this.m168lambda$open$9$comgmailheagooapkeditorComparisonActivity();
-                        }
-                    });
-                    index2 = File.createTempFile("compare-bytes-", ".idx", getCacheDir());
-                    InputStream a = ComparisonCore.openInput(selected, entry, true);
+            if (this.cancelled || this.destroyed) {
+                throw new InterruptedIOException("Отменено");
+            }
+            boolean xml = ComparisonEntryXml.isBinary(selected, entry, true)
+                    || ComparisonEntryXml.isBinary(selected, entry, false);
+            if (xml) {
+                decodedXml = true;
+                leftText = ComparisonEntryXml.read(selected, entry, true);
+                rightText = ComparisonEntryXml.read(selected, entry, false);
+            } else if (ComparisonBinaryMode.knownBinaryName(entry.name)) {
+                throw new IOException("Бинарный файл: текстовый diff недоступен");
+            } else {
+                leftText = ComparisonCore.readText(selected, entry, true);
+                rightText = ComparisonCore.readText(selected, entry, false);
+            }
+            diff = ComparisonCore.diff(leftText, rightText);
+            if (this.cancelled || this.destroyed) {
+                throw new InterruptedIOException("Отменено");
+            }
+        } catch (Exception textError) {
+            if (this.cancelled || this.destroyed) {
+                failure = "Отменено";
+            } else {
+                String textMessage = textError.getMessage() == null
+                        ? textError.toString() : textError.getMessage();
+                if (!ComparisonBinaryMode.shouldUseBinary(entry.name, decodedXml, textMessage)) {
+                    // A size/row-limit or I/O error in a real text file must not
+                    // silently change the requested text viewer into a byte dump.
+                    failure = textMessage;
+                } else {
                     try {
-                        InputStream b = ComparisonCore.openInput(selected, entry, false);
-                        try {
-                            count2 = BinaryDiffIndex.build(a, b, index2, new BooleanSupplier() {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public final void run() {
+                                ComparisonActivity.this.m168lambda$open$9$comgmailheagooapkeditorComparisonActivity();
+                            }
+                        });
+                        binary = File.createTempFile("compare-bytes-", ".idx", getCacheDir());
+                        try (InputStream first = emptyIfMissing(
+                                     ComparisonCore.openInput(selected, entry, true));
+                             InputStream second = emptyIfMissing(
+                                     ComparisonCore.openInput(selected, entry, false))) {
+                            changes = BinaryDiffIndex.build(first, second, binary, new BooleanSupplier() {
                                 @Override
                                 public final boolean getAsBoolean() {
                                     return ComparisonActivity.this.m165lambda$open$10$comgmailheagooapkeditorComparisonActivity();
                                 }
                             });
-                            if (b != null) {
-                                b.close();
-                            }
-                            if (a != null) {
-                                a.close();
-                            }
-                        } finally {
                         }
-                    } catch (Throwable th) {
-                        if (a == null) {
-                            throw th;
+                    } catch (Exception binaryError) {
+                        if (binary != null) {
+                            binary.delete();
+                            binary = null;
                         }
-                        try {
-                            a.close();
-                            throw th;
-                        } catch (Throwable th2) {
-                            th.addSuppressed(th2);
-                            throw th;
-                        }
+                        String binaryMessage = binaryError.getMessage() == null
+                                ? binaryError.toString() : binaryError.getMessage();
+                        failure = textMessage + "; " + binaryMessage;
                     }
-                } else {
-                    throw new InterruptedIOException("Отменено");
                 }
             }
-        } catch (Exception ex) {
-            if (index2 != null) {
-                index2.delete();
-            }
-            String error2 = ex.getMessage() == null ? ex.toString() : ex.getMessage();
-            d = null;
-            ltext = ltext2;
-            rtext = rtext2;
-            index = null;
-            count = 0;
-            error = error2;
-            decodedXml = false;
         }
-        try {
-            if (this.cancelled || this.destroyed) {
-                throw new InterruptedIOException("Отменено");
-            }
-            boolean xml = ComparisonEntryXml.isBinary(selected, entry, true) || ComparisonEntryXml.isBinary(selected, entry, false);
-        if (xml) {
-            decodedXml2 = true;
-            ltext2 = ComparisonEntryXml.read(selected, entry, true);
-            rtext2 = ComparisonEntryXml.read(selected, entry, false);
-        } else {
-            ltext2 = ComparisonCore.readText(selected, entry, true);
-            rtext2 = ComparisonCore.readText(selected, entry, false);
-        }
-        d2 = ComparisonCore.diff(ltext2, rtext2);
-        if (this.cancelled || this.destroyed) {
-            throw new InterruptedIOException("Отменено");
-        }
-            d = d2;
-            ltext = ltext2;
-            rtext = rtext2;
-            index = index2;
-            count = count2;
-            error = null;
-            decodedXml = decodedXml2;
-        } catch (Exception ex) {
-            d = null;
-            ltext = ltext2;
-            rtext = rtext2;
-            index = null;
-            count = 0;
-            error = ex.getMessage() == null ? ex.toString() : ex.getMessage();
-            decodedXml = false;
-        }
-        final ComparisonCore.Diff diff = d;
-        final String failure = error;
-        final String leftText = ltext;
-        final String rightText = rtext;
-        final File binary = index;
-        final long changes = count;
-        final boolean isDecoded = decodedXml;
+        final ComparisonCore.Diff resultDiff = diff;
+        final String resultFailure = failure;
+        final String resultLeftText = leftText;
+        final String resultRightText = rightText;
+        final File resultBinary = binary;
+        final long resultChanges = changes;
+        final boolean resultDecodedXml = decodedXml;
         final boolean wasCancelled = this.cancelled;
         runOnUiThread(new Runnable() {
             @Override
             public final void run() {
-                ComparisonActivity.this.m166lambda$open$11$comgmailheagooapkeditorComparisonActivity(binary, wasCancelled, failure, entry, changes, diff, leftText, rightText, isDecoded);
+                ComparisonActivity.this.m166lambda$open$11$comgmailheagooapkeditorComparisonActivity(
+                        resultBinary, wasCancelled, resultFailure, entry, resultChanges,
+                        resultDiff, resultLeftText, resultRightText, resultDecodedXml);
             }
         });
+    }
+
+    private static InputStream emptyIfMissing(InputStream input) {
+        return input == null ? new ByteArrayInputStream(new byte[0]) : input;
     }
 
     void m168lambda$open$9$comgmailheagooapkeditorComparisonActivity() {

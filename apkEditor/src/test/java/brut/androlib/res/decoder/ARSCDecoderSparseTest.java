@@ -115,6 +115,16 @@ public class ARSCDecoderSparseTest {
     }
 
     @Test
+    public void appliesExtendedPackageTypeIdOffsetToTypeChunks() throws Exception {
+        ARSCDecoder.ARSCData decoded = ARSCDecoder.decode(
+                new ByteArrayInputStream(singleEntryResourceTable(0, false, 1)), false, false);
+        assertEquals("value", decoded.getOnePackage()
+                .getResSpec(new ResID(0x7f010000)).getName());
+        assertTrue("extended package header must retain values resources",
+                decoded.getOnePackage().listValuesFiles().size() > 0);
+    }
+
+    @Test
     public void decodesCompactSimpleEntries() throws Exception {
         ARSCDecoder.ARSCData decoded = ARSCDecoder.decode(
                 new ByteArrayInputStream(singleEntryResourceTable(0, true)), false, false);
@@ -170,6 +180,11 @@ public class ARSCDecoderSparseTest {
     }
 
     private static byte[] singleEntryResourceTable(int typeFlags, boolean compact) {
+        return singleEntryResourceTable(typeFlags, compact, 0);
+    }
+
+    private static byte[] singleEntryResourceTable(int typeFlags, boolean compact,
+                                                   int typeIdOffset) {
         byte[] values = stringPool(new String[]{"Hello"});
         byte[] typeNames = stringPool(new String[]{"string"});
         byte[] keyNames = stringPool(new String[]{"value"});
@@ -192,7 +207,7 @@ public class ARSCDecoderSparseTest {
         config.putShort((short) 0x0201);
         config.putShort((short) 48);
         config.putInt(type.length);
-        config.put((byte) 1);
+        config.put((byte) (1 + typeIdOffset));
         config.put((byte) typeFlags);
         config.putShort((short) 0);
         config.putInt(1);
@@ -214,11 +229,16 @@ public class ARSCDecoderSparseTest {
         } else {
             putSimpleStringEntry(config, 0, 0);
         }
-        return wrapPackage(values, typeNames, keyNames, typeSpec, type);
+        return wrapPackage(values, typeNames, keyNames, typeSpec, type, typeIdOffset);
     }
 
     private static byte[] wrapPackage(byte[] values, byte[] typeNames, byte[] keyNames,
                                        byte[] typeSpec, byte[] type) {
+        return wrapPackage(values, typeNames, keyNames, typeSpec, type, 0);
+    }
+
+    private static byte[] wrapPackage(byte[] values, byte[] typeNames, byte[] keyNames,
+                                       byte[] typeSpec, byte[] type, int typeIdOffset) {
         int packageSize = 288 + typeNames.length + keyNames.length
                 + typeSpec.length + type.length;
         byte[] pkg = new byte[packageSize];
@@ -235,7 +255,7 @@ public class ARSCDecoderSparseTest {
         packageBuffer.putInt(0);
         packageBuffer.putInt(288 + typeNames.length);
         packageBuffer.putInt(1);
-        packageBuffer.putInt(0);   // typeIdOffset
+        packageBuffer.putInt(typeIdOffset); // typeIdOffset
         packageBuffer.position(288);
         packageBuffer.put(typeNames);
         packageBuffer.put(keyNames);

@@ -581,7 +581,8 @@ public class ApkCreateActivity extends CustomizedLangActivity implements OnClick
                 if (activity.workingDir == null) {
                     activity.workingDir = SDCard.makeWorkingDir(activity);
                 }
-                log = new BuildLog(new File(activity.workingDir, "build-log.txt"));
+                log = new BuildLog(new File(activity.workingDir, "build-log.txt"),
+                        BuildLog.languageFor(activity));
                 this.buildLogPath = log.getPath();
                 activity.buildLogPath = this.buildLogPath;
 

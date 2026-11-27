@@ -267,6 +267,13 @@ public class ManifestParser implements IAttributeCallback {
                 return "versionCode";
             case 0x010104ea:
                 return "extractNativeLibs";
+            case 0x01010549:
+                // This framework ID is exposed as splitName for component
+                // declarations. A root split declaration is unqualified and is
+                // read directly from the string pool as "split".
+                return "splitName";
+            case 0x0101055b:
+                return "isFeatureSplit";
             case 0x01010591:
                 return "isSplitRequired";
             case 0x0101059e:
@@ -344,6 +351,18 @@ public class ManifestParser implements IAttributeCallback {
                     && AxmlBodyChunk.isTypeRefToStrTable(type)) {
                 this.result.pkgNameIdx = idx;
                 this.result.packageName = strChunk.getStringByIndex(idx);
+            } else if (("split".equals(attrName) || "splitName".equals(attrName))
+                    && AxmlBodyChunk.isTypeRefToStrTable(type)) {
+                // Android's manifest parser reads the unqualified attribute
+                // "split" and rejects a non-empty value when the archive is
+                // parsed as a standalone base APK. Some resource-name maps
+                // expose the same framework ID as splitName, so accept both.
+                this.result.splitName = strChunk.getStringByIndex(idx);
+            } else if ("configForSplit".equals(attrName)
+                    && AxmlBodyChunk.isTypeRefToStrTable(type)) {
+                this.result.configForSplit = strChunk.getStringByIndex(idx);
+            } else if ("isFeatureSplit".equals(attrName)) {
+                this.result.isFeatureSplit = idx != 0;
             } else if ("isSplitRequired".equals(attrName)) {
                 this.result.isSplitRequired = idx != 0;
             } else if ("requiredSplitTypes".equals(attrName)
@@ -478,6 +497,9 @@ public class ManifestParser implements IAttributeCallback {
                 .append(", receivers=").append(receivers)
                 .append(", providers=").append(providers).append('}')
                 .append(", permissions=").append(info.permissions.size())
+                .append(", splitName=").append(info.splitName)
+                .append(", configForSplit=").append(info.configForSplit)
+                .append(", isFeatureSplit=").append(info.isFeatureSplit)
                 .append(", isSplitRequired=").append(info.isSplitRequired)
                 .append(", requiredSplitTypes=").append(info.requiredSplitTypes)
                 .append(", splitTypes=").append(info.splitTypes)

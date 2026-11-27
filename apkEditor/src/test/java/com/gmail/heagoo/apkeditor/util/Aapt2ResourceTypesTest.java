@@ -194,4 +194,5 @@ public class Aapt2ResourceTypesTest {
         assertFalse(Aapt2ResourceTypes.isUnknownTypeFailure("AAPT2 timed out"));
         assertFalse(Aapt2ResourceTypes.isUnknownTypeFailure(null));
     }
+
 }

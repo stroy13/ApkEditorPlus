@@ -58,7 +58,14 @@ public class ResPluralsValue extends ResBagValue implements
 
             serializer.startTag(null, "item");
             serializer.attribute(null, "quantity", QUANTITY_MAP[i]);
-            serializer.text(ResXmlEncoders.enumerateNonPositionalSubstitutionsIfRequired(item.encodeAsResXmlNonEscapedItemValue()));
+            String itemValue = ResXmlEncoders.enumerateNonPositionalSubstitutionsIfRequired(
+                    item.encodeAsResXmlNonEscapedItemValue());
+            // A malformed/out-of-range string-pool reference can decode to a
+            // scalar with a null XML value. XmlSerializer.text(null) leaves the
+            // item open (and the old caller swallowed the exception), producing
+            // a mismatched plurals.xml that AAPT2 rejects. Empty text is valid XML
+            // and keeps the resource file structurally well-formed.
+            serializer.text(itemValue == null ? "" : itemValue);
             serializer.endTag(null, "item");
         }
         serializer.endTag(null, "plurals");

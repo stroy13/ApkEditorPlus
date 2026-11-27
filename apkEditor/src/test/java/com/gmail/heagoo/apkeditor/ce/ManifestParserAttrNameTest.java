@@ -12,4 +12,10 @@ public class ManifestParserAttrNameTest {
         assertEquals("targetSdkVersion", ManifestParser.getNameFromAttr(0x01010270));
         assertEquals("maxSdkVersion", ManifestParser.getNameFromAttr(0x01010271));
     }
+
+    @Test
+    public void resolvesSplitIdentityAttributesFromFrameworkResourceIds() {
+        assertEquals("splitName", ManifestParser.getNameFromAttr(0x01010549));
+        assertEquals("isFeatureSplit", ManifestParser.getNameFromAttr(0x0101055b));
+    }
 }

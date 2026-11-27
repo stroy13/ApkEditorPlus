@@ -75,6 +75,7 @@ public final class Aapt2Pipeline {
                 logger.log("AAPT2 manifest: removed split-only requirements from standalone base APK");
             }
             manifestAfterRepair = removeEmptyAndroidAttributes(manifestAfterRepair);
+            manifestAfterRepair = ensureMetaDataPayloads(manifestAfterRepair);
             manifestAfterRepair = removeInvalidUsesFeatureElements(manifestAfterRepair);
             if (!manifestBeforeRepair.equals(manifestAfterRepair)) {
                 if (stagedManifest == null) {
@@ -83,7 +84,10 @@ public final class Aapt2Pipeline {
                 }
                 Files.write(stagedManifest, manifestAfterRepair.getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 linkManifest = stagedManifest.toString();
-                if (logger != null) logger.log("AAPT2 manifest: restored synthetic Android attribute names");
+                if (logger != null) {
+                    logger.log("AAPT2 manifest: restored synthetic Android attribute names");
+                    logger.log("AAPT2 manifest: metadata payloads preserved or repaired");
+                }
             }
             if (logger != null) logger.log("AAPT2 resource scan and staging: " + elapsed(repairStart) + " ms; repaired files=" + repairs.size());
             try {
@@ -161,7 +165,10 @@ public final class Aapt2Pipeline {
     private static final Pattern SYNTHETIC_FRAMEWORK_ATTRIBUTE = Pattern.compile(
             "android:attr_0x([0-9a-fA-F]{8})");
     private static final Pattern EMPTY_ANDROID_ATTRIBUTE = Pattern.compile(
-            "\\s+android:[A-Za-z_][A-Za-z0-9_.-]*\\s*=\\s*(['\\\"])(?:\\s*)\\1");
+            "\\s+android:([A-Za-z_][A-Za-z0-9_.-]*)\\s*=\\s*(['\\\"])(?:\\s*)\\2");
+    private static final Pattern META_DATA_TAG = Pattern.compile("<meta-data\\b[^>]*>", Pattern.DOTALL);
+    private static final Pattern META_DATA_PAYLOAD = Pattern.compile(
+            "\\bandroid:(?:value|resource)\\s*=");
 
     private static final Pattern SPLIT_REQUIRED_ATTRIBUTE = Pattern.compile(
             "\\s+android:isSplitRequired\\s*=\\s*(['\\\"])[^'\\\"]*\\1");
@@ -181,7 +188,42 @@ public final class Aapt2Pipeline {
     }
 
     static String removeEmptyAndroidAttributes(String manifestXml) {
-        return EMPTY_ANDROID_ATTRIBUTE.matcher(manifestXml).replaceAll("");
+        Matcher matcher = EMPTY_ANDROID_ATTRIBUTE.matcher(manifestXml);
+        StringBuffer result = new StringBuffer(manifestXml.length());
+        while (matcher.find()) {
+            String attribute = matcher.group(1);
+            // Android's PackageParser requires every <meta-data> element to retain
+            // either android:value or android:resource. A decoded empty value is
+            // still an explicit value; deleting it turns a valid legacy package
+            // into the exact "requires an android:value or android:resource"
+            // failure reported by the framework parser.
+            if ("value".equals(attribute) || "resource".equals(attribute)) {
+                matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group()));
+            } else {
+                matcher.appendReplacement(result, "");
+            }
+        }
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
+    /** Ensure framework PackageParser can materialize every decoded meta-data item. */
+    static String ensureMetaDataPayloads(String manifestXml) {
+        Matcher matcher = META_DATA_TAG.matcher(manifestXml);
+        StringBuffer result = new StringBuffer(manifestXml.length());
+        while (matcher.find()) {
+            String tag = matcher.group();
+            if (META_DATA_PAYLOAD.matcher(tag).find()) {
+                matcher.appendReplacement(result, Matcher.quoteReplacement(tag));
+                continue;
+            }
+            int insertion = tag.endsWith("/>") ? tag.length() - 2 : tag.length() - 1;
+            String repaired = tag.substring(0, insertion)
+                    + " android:value=\"\"" + tag.substring(insertion);
+            matcher.appendReplacement(result, Matcher.quoteReplacement(repaired));
+        }
+        matcher.appendTail(result);
+        return result.toString();
     }
 
     private static final Pattern USES_FEATURE_START = Pattern.compile("<uses-feature\\b([^>]*)>");

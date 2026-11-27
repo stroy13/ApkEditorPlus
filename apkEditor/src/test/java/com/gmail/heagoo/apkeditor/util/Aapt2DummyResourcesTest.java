@@ -93,9 +93,16 @@ public class Aapt2DummyResourcesTest {
                 + "<item type=\"attr\" name=\"dummy_ae_2\">false</item></resources>";
         String arrays = "<resources><string-array name=\"real_array\"><item>value</item></string-array>\n"
                 + "<item type=\"array\" name=\"dummy_ae_3\">false</item></resources>";
+        // This is the shape emitted by the decoder when a plural item has no
+        // usable string-pool value. AAPT2 must accept the empty item after the
+        // values XML has been repaired/staged.
+        String plurals = "<resources><plurals name=\"real_plural\"><item quantity=\"one\">one</item>"
+                + "<item quantity=\"other\"></item></plurals></resources>";
         Path attrsFile = values.resolve("attrs.xml"), arraysFile = values.resolve("arrays.xml");
+        Path pluralsFile = values.resolve("plurals.xml");
         Files.write(attrsFile, attrs.getBytes(StandardCharsets.UTF_8));
         Files.write(arraysFile, arrays.getBytes(StandardCharsets.UTF_8));
+        Files.write(pluralsFile, plurals.getBytes(StandardCharsets.UTF_8));
         StringBuilder misc = new StringBuilder("<resources>\n");
         String[] types = {"anim", "animator", "color", "dimen", "drawable", "font", "fraction", "integer", "interpolator", "layout", "menu", "mipmap", "navigation", "plurals", "raw", "style", "transition", "xml"};
         for (String type : types) misc.append("<item type=\"").append(type)
@@ -121,6 +128,7 @@ public class Aapt2DummyResourcesTest {
         assertTrue(apk.isFile() && apk.length() > 0);
         assertEquals(attrs, new String(Files.readAllBytes(attrsFile), StandardCharsets.UTF_8));
         assertEquals(arrays, new String(Files.readAllBytes(arraysFile), StandardCharsets.UTF_8));
+        assertEquals(plurals, new String(Files.readAllBytes(pluralsFile), StandardCharsets.UTF_8));
     }
 
     private static byte[] readAll(java.io.InputStream input) throws Exception {

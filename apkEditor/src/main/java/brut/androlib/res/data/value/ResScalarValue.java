@@ -73,7 +73,8 @@ public abstract class ResScalarValue extends ResIntBasedValue implements
     }
 
     public String encodeAsResXmlNonEscapedItemValue() throws AndrolibException {
-        return encodeAsResXmlValue().replace("&amp;", "&").replace("&lt;", "<");
+        String value = encodeAsResXmlValue();
+        return value == null ? null : value.replace("&amp;", "&").replace("&lt;", "<");
     }
 
     public boolean hasMultipleNonPositionalSubstitutions() throws AndrolibException {
@@ -87,6 +88,12 @@ public abstract class ResScalarValue extends ResIntBasedValue implements
         boolean item = !"reference".equals(mType) && !type.equals(mType);
 
         String body = encodeAsResXmlValue();
+        // Keep malformed string-pool data from passing null to the XML
+        // serializer. A null text value can leave an open tag behind when the
+        // caller continues writing the values file.
+        if (body == null) {
+            body = "";
+        }
 
         // check for resource reference
         if (!type.equalsIgnoreCase("color")) {

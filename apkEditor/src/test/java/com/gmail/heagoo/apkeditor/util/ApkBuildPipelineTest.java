@@ -149,6 +149,8 @@ public class ApkBuildPipelineTest {
         ApkBuildPipeline.build(source, target, replaces, null, null, options(), null, null);
         assertTrue(target.isFile());
         try (ZipFile zip = new ZipFile(target)) {
+            assertEquals("binary manifest is kept uncompressed for PackageManager compatibility",
+                    ZipEntry.STORED, zip.getEntry("AndroidManifest.xml").getMethod());
             assertEquals(ZipEntry.STORED, zip.getEntry("resources.arsc").getMethod());
             assertEquals(ZipEntry.STORED, zip.getEntry("lib/arm64-v8a/libgame.so").getMethod());
             assertFalse("old signature must be stripped", zip.getEntry("META-INF/CERT.RSA") != null
@@ -204,6 +206,50 @@ public class ApkBuildPipelineTest {
             assertTrue(expected.getMessage().contains("missing"));
         }
         assertFalse(target.exists());
+    }
+
+    @Test
+    public void staleReplacementEntryFailsBeforePublishing() throws Exception {
+        File source = sourceApk();
+        File target = new File(folder.getRoot(), "stale-map.apk");
+        File replacement = folder.newFile("replacement.bin");
+        Files.write(replacement.toPath(), new byte[]{1, 2, 3});
+        Map<String, String> replaces = Collections.singletonMap("res/drawable/stale.bin",
+                replacement.getAbsolutePath());
+        try {
+            ApkBuildPipeline.build(source, target, replaces, null, null, options(), null, null);
+            fail("Expected stale mapping failure");
+        } catch (Exception expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("not present in source APK"));
+        }
+        assertFalse(target.exists());
+    }
+
+    @Test
+    public void staleDecodedResourceMappingIsRejected() throws Exception {
+        File source = sourceApk();
+        Map<String, String> mappings = Collections.singletonMap("res/drawable/icon.png", "res/drawable/missing.png");
+        try {
+            ApkBuildPipeline.validateEntryMappings(source, mappings);
+            fail("Expected stale resource mapping failure");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("Stale resource entry mapping"));
+        }
+    }
+
+    @Test
+    public void conflictingEntryOperationsAreRejected() throws Exception {
+        File source = sourceApk();
+        File replacement = folder.newFile("replacement.bin");
+        Files.write(replacement.toPath(), new byte[]{1});
+        Map<String, String> replaces = Collections.singletonMap("classes.dex", replacement.getAbsolutePath());
+        try {
+            ApkBuildPipeline.build(source, new File(folder.getRoot(), "conflict.apk"), replaces,
+                    null, Collections.singleton("classes.dex"), options(), null, null);
+            fail("Expected conflicting operation failure");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("both replaced and deleted"));
+        }
     }
 
     @Test
@@ -356,6 +402,39 @@ public class ApkBuildPipelineTest {
     }
 
     @Test
+    public void unsignedMergeRejectsStaleReplacementBeforePublish() throws Exception {
+        File source = sourceApk();
+        File target = new File(folder.getRoot(), "stale-unsigned.apk");
+        File replacement = folder.newFile("stale-replacement.bin");
+        Files.write(replacement.toPath(), new byte[]{1, 2, 3});
+        Map<String, String> replaces = Collections.singletonMap("assets/missing.bin",
+                replacement.getAbsolutePath());
+        try {
+            ApkBuildPipeline.mergeUnsigned(source, target, replaces, null, null, 0, -1, null);
+            fail("Expected stale unsigned replacement failure");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("not present in source APK"));
+        }
+        assertFalse(target.exists());
+    }
+
+    @Test
+    public void unsafeNativeOperationNameIsRejectedBeforePublish() throws Exception {
+        File source = sourceApk();
+        File target = new File(folder.getRoot(), "unsafe-unsigned.apk");
+        File addition = folder.newFile("addition.bin");
+        Files.write(addition.toPath(), new byte[]{1});
+        Map<String, String> added = Collections.singletonMap("../escape", addition.getAbsolutePath());
+        try {
+            ApkBuildPipeline.mergeUnsigned(source, target, null, added, null, 0, -1, null);
+            fail("Expected unsafe entry failure");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("Unsafe ZIP entry name"));
+        }
+        assertFalse(target.exists());
+    }
+
+    @Test
     public void invalidEditedManifestIsRejectedBeforePublish() throws Exception {
         File source = sourceApk();
         File target = new File(folder.getRoot(), "gen_signed.apk");
@@ -384,6 +463,7 @@ public class ApkBuildPipelineTest {
         assertTrue(text.contains("Stage: sign"));
         assertTrue(text.contains("Stage: verify"));
         assertTrue(text.contains("Stage: publish"));
+        assertTrue(text.contains("merge AndroidManifest.xml: sourceMethod=DEFLATED, outputMethod=STORED"));
         assertTrue(text.contains("structure OK: AndroidManifest.xml"));
         assertTrue(text.contains("signed structure OK: resources.arsc"));
         assertTrue(text.contains("build() succeeded"));

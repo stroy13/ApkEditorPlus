@@ -22,8 +22,6 @@ import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 import com.gmail.heagoo.apkeditor.BinaryDiffIndex;
 import com.gmail.heagoo.apkeditor.base.R;
-import com.gmail.heagoo.neweditor.ParserRule;
-import com.gmail.heagoo.neweditor.Token;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -244,7 +242,6 @@ public final class BinaryDiffDialog {
     }
 
     private void append(SpannableStringBuilder s, BinaryDiffIndex.Row row, byte[] bytes, int color) {
-        char[] h = "0123456789ABCDEF".toCharArray();
         int size = Math.max(row.left.length, row.right.length);
         for (int i = 0; i < size; i++) {
             if (i > 0) {
@@ -254,8 +251,7 @@ public final class BinaryDiffDialog {
             if (i >= bytes.length) {
                 s.append("--");
             } else {
-                s.append(h[(bytes[i] & ParserRule.MATCH_TYPE_CONTEXT) >>> 4]);
-                s.append(h[bytes[i] & Token.LITERAL3]);
+                s.append(BinaryDiffHex.format(bytes[i]));
             }
             if (row.differs(i)) {
                 s.setSpan(new ForegroundColorSpan(color), start, s.length(), 33);

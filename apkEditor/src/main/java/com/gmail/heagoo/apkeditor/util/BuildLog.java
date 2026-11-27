@@ -1,5 +1,8 @@
 package com.gmail.heagoo.apkeditor.util;
 
+import android.content.Context;
+import android.preference.PreferenceManager;
+
 import java.io.BufferedWriter;
 import java.io.Closeable;
 import java.io.File;
@@ -27,6 +30,7 @@ public final class BuildLog implements Closeable, ApkBuildPipeline.Logger {
 
     private final File file;
     private final PrintWriter writer;
+    private final String language;
     private final long startedAt = System.currentTimeMillis();
     private final SimpleDateFormat clock = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
     private boolean closed;
@@ -34,7 +38,25 @@ public final class BuildLog implements Closeable, ApkBuildPipeline.Logger {
     private long lastFlushAt;
 
     public BuildLog(File file) throws IOException {
+        this(file, defaultLanguage());
+    }
+
+    /** Resolve the same language setting used by the live build-log view. */
+    public static String languageFor(Context context) {
+        if (context == null) {
+            return defaultLanguage();
+        }
+        String preference = PreferenceManager.getDefaultSharedPreferences(context)
+                .getString("BuildLogLanguage", "system");
+        String systemLanguage = context.getResources().getConfiguration().getLocales().get(0)
+                .getLanguage();
+        return BuildLogDisplay.resolveLanguage(preference, systemLanguage);
+    }
+
+    /** Create a log using the requested display language (currently ru or en). */
+    public BuildLog(File file, String language) throws IOException {
         this.file = file.getAbsoluteFile();
+        this.language = "ru".equals(language) ? "ru" : "en";
         File parent = this.file.getParentFile();
         if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
             throw new IOException("Cannot create log directory: " + parent);
@@ -99,17 +121,22 @@ public final class BuildLog implements Closeable, ApkBuildPipeline.Logger {
         writer.flush();
     }
 
+    private static String defaultLanguage() {
+        return "ru".equals(Locale.getDefault().getLanguage()) ? "ru" : "en";
+    }
+
     private void line(String message) {
         if (closed) {
             return;
         }
         long elapsed = System.currentTimeMillis() - startedAt;
+        String localized = BuildLogDisplay.render(message == null ? "null" : message, language);
         writer.print('[');
         writer.print(clock.format(new Date()));
         writer.print(" +");
         writer.print(elapsed);
         writer.print("ms] ");
-        writer.println(message == null ? "null" : message);
+        writer.println(localized);
         // Periodic flush so a sudden process death still leaves a useful tail on disk.
         long now = System.currentTimeMillis();
         if (++lineCount % 64 == 0 || now - lastFlushAt >= 500) {
