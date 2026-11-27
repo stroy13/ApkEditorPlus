@@ -34,8 +34,10 @@ public class ComparisonScreenRegressionTest {
         assertTrue("the mode listener must exist", listener >= 0);
         assertTrue("the initial status/filter state must not depend on Spinner callbacks",
                 initialRefresh > listener);
-        assertTrue("swap must be disabled until both sides are selected",
-                src.contains("this.swap.setEnabled(this.left != null && this.right != null);"));
+        assertTrue("swap must explain why it cannot run without both sides",
+                src.contains("Выберите оба объекта, чтобы поменять их местами."));
+        assertTrue("swap remains visually outlined while showing that feedback",
+                src.contains("this.swap.setEnabled(enable);"));
         assertTrue("action buttons need a gap so their rounded lower borders are not overdrawn",
                 src.contains("int actionGap = dp(4.0f);"));
         assertTrue(src.contains("compareParams.setMargins(0, 0, actionGap, 0);"));
@@ -55,6 +57,8 @@ public class ComparisonScreenRegressionTest {
         assertTrue(src.contains("isSmaliEntry(entry.name)"));
         assertTrue(src.contains("new ColorTheme(this.activity, \"smali.xml\")"));
         assertTrue(src.contains("SmaliSyntax.tokenize(line)"));
+        String document = read("_AndroidEditor/src/main/java/com/gmail/heagoo/neweditor/Document.java");
+        assertTrue(document.contains("SmaliSyntaxFallback.parse(text, colors, cancelled)"));
     }
 
     @Test

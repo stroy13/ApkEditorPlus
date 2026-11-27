@@ -269,6 +269,10 @@ public final class ComparisonActivity extends ThemedActivity implements FileSele
         if (this.busy) {
             return;
         }
+        if (this.left == null || this.right == null) {
+            this.status.setText("Выберите оба объекта, чтобы поменять их местами.");
+            return;
+        }
         String tmp = this.left;
         this.left = this.right;
         this.right = tmp;
@@ -346,11 +350,6 @@ public final class ComparisonActivity extends ThemedActivity implements FileSele
     public void updateLabels() {
         this.leftLabel.setText("Первый: " + (this.left == null ? "не выбран" : this.left));
         this.rightLabel.setText("Второй: " + (this.right != null ? this.right : "не выбран"));
-        if (!this.busy && this.swap != null) {
-            // Swapping an incomplete pair is a no-op; do not present it as an
-            // available action on the empty start screen.
-            this.swap.setEnabled(this.left != null && this.right != null);
-        }
     }
 
     private void choose(String side) {
@@ -413,7 +412,7 @@ public final class ComparisonActivity extends ThemedActivity implements FileSele
         this.chooseLeft.setEnabled(enable);
         this.chooseRight.setEnabled(enable);
         this.mode.setEnabled(enable);
-        this.swap.setEnabled(enable && this.left != null && this.right != null);
+        this.swap.setEnabled(enable);
         this.category.setEnabled(enable);
         this.search.setEnabled(enable);
     }

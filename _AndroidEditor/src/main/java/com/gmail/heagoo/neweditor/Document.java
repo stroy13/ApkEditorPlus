@@ -247,12 +247,20 @@ public class Document implements Serializable {
     }
 
     public SyntaxSnapshot syntaxSnapshot(String text, BooleanSupplier cancelled) {
-        return SyntaxSnapshot.parse(text, this.mTokenMarker, new SyntaxSnapshot.Color() {
+        SyntaxSnapshot.Color colors = new SyntaxSnapshot.Color() {
             @Override
             public final int color(Token token) {
                 return Document.this.m378lambda$syntaxSnapshot$0$comgmailheagooneweditorDocument(token);
             }
-        }, cancelled);
+        };
+        // Some Android XML/SAX implementations reject the bundled jEdit mode
+        // even though the editor can still render the file. Keep smali usable
+        // with a deterministic line tokenizer instead of silently showing a
+        // completely white document.
+        if ("smali.xml".equals(this.syntaxName)) {
+            return SmaliSyntaxFallback.parse(text, colors, cancelled);
+        }
+        return SyntaxSnapshot.parse(text, this.mTokenMarker, colors, cancelled);
     }
 
     public void syntaxHighlight(EditText textEditor, int start, int end, int lstart, int lend, boolean change, Context context) {

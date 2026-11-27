@@ -42,6 +42,10 @@ public final class SyntaxSnapshot {
         this.length = n;
     }
 
+    static SyntaxSnapshot create(List<Line> lines, int length) {
+        return new SyntaxSnapshot(lines, length);
+    }
+
     public int lineAt(int offset) {
         int low = 0;
         int high = this.lines.size() - 1;
