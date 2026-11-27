@@ -49,6 +49,8 @@ public class ResAttrDecoder {
     private static final int ANDROID_ATTR_SCREEN_ORIENTATION = 0x0101001e;
     private static final int ANDROID_ATTR_CONFIG_CHANGES = 0x0101001f;
     private static final int ANDROID_ATTR_RESOURCE = 0x01010025;
+    private static final int ANDROID_ATTR_ACCESSIBILITY_EVENT_TYPES = 0x01010380;
+    private static final int ANDROID_ATTR_ACCESSIBILITY_FEEDBACK_TYPE = 0x01010382;
     private static final int ANDROID_ATTR_MIN_SDK = 0x0101020c;
     private static final int ANDROID_ATTR_VERSION_CODE = 0x0101021b;
     private static final int ANDROID_ATTR_VERSION_NAME = 0x0101021c;
@@ -196,6 +198,34 @@ public class ResAttrDecoder {
                                 "layoutDirection", "colorMode", "grammaticalGender",
                                 "resourcesUnused", "fontWeightAdjustment", "fontScale",
                                 "assetsPaths"});
+            case ANDROID_ATTR_ACCESSIBILITY_EVENT_TYPES:
+                return renderAccessibilityFlags(scalar,
+                        new int[]{0xffffffff, 0x00000001, 0x00000002, 0x00000004, 0x00000008,
+                                0x00000010, 0x00000020, 0x00000040, 0x00000080, 0x00000100,
+                                0x00000200, 0x00000400, 0x00000800, 0x00001000,
+                                0x00002000, 0x00004000, 0x00008000, 0x00010000,
+                                0x00020000, 0x00040000, 0x00080000, 0x00100000,
+                                0x00200000, 0x00400000, 0x00800000, 0x01000000,
+                                0x02000000},
+                        new String[]{"typeAllMask", "typeViewClicked", "typeViewLongClicked",
+                                "typeViewSelected", "typeViewFocused", "typeViewTextChanged",
+                                "typeWindowStateChanged", "typeNotificationStateChanged",
+                                "typeViewHoverEnter", "typeViewHoverExit",
+                                "typeTouchExplorationGestureStart", "typeTouchExplorationGestureEnd",
+                                "typeWindowContentChanged", "typeViewScrolled",
+                                "typeViewTextSelectionChanged", "typeAnnouncement",
+                                "typeViewAccessibilityFocused", "typeViewAccessibilityFocusCleared",
+                                "typeViewTextTraversedAtMovementGranularity",
+                                "typeGestureDetectionStart", "typeGestureDetectionEnd",
+                                "typeTouchInteractionStart", "typeTouchInteractionEnd",
+                                "typeWindowsChanged", "typeContextClicked", "typeAssistReadingContext",
+                                "typeSpeechStateChange"});
+            case ANDROID_ATTR_ACCESSIBILITY_FEEDBACK_TYPE:
+                return renderAccessibilityFlags(scalar,
+                        new int[]{0xffffffff, 0x00000001, 0x00000002, 0x00000004,
+                                0x00000008, 0x00000010},
+                        new String[]{"feedbackAllMask", "feedbackSpoken", "feedbackHaptic",
+                                "feedbackAudible", "feedbackVisual", "feedbackGeneric"});
             case ANDROID_ATTR_LAUNCH_MODE:
                 return exact(scalar, new int[]{0, 1, 2, 3, 4},
                         new String[]{"standard", "singleTop", "singleTask", "singleInstance",
@@ -503,6 +533,14 @@ public class ResAttrDecoder {
         return null;
     }
 
+    private static String renderAccessibilityFlags(int value, int[] flags, String[] names) {
+        // A zero flag mask is a valid value in the binary XML, but aapt2 does not
+        // accept the scalar spelling "0x0" for a flags attribute. @null is
+        // accepted by aapt2 and preserves the zero value instead of changing it
+        // to an all-bits mask.
+        return value == 0 ? "@null" : renderFlags(value, flags, names);
+    }
+
     private static String renderFlags(int value, int[] flags, String[] names) {
         if (value == 0) {
             return null;
@@ -562,6 +600,8 @@ public class ResAttrDecoder {
         if ("launchMode".equals(name)) return ANDROID_ATTR_LAUNCH_MODE;
         if ("screenOrientation".equals(name)) return ANDROID_ATTR_SCREEN_ORIENTATION;
         if ("configChanges".equals(name)) return ANDROID_ATTR_CONFIG_CHANGES;
+        if ("accessibilityEventTypes".equals(name)) return ANDROID_ATTR_ACCESSIBILITY_EVENT_TYPES;
+        if ("accessibilityFeedbackType".equals(name)) return ANDROID_ATTR_ACCESSIBILITY_FEEDBACK_TYPE;
         if ("resource".equals(name)) return ANDROID_ATTR_RESOURCE;
         if ("minSdkVersion".equals(name)) return ANDROID_ATTR_MIN_SDK;
         if ("versionCode".equals(name)) return ANDROID_ATTR_VERSION_CODE;
@@ -618,6 +658,8 @@ public class ResAttrDecoder {
             case ANDROID_ATTR_LAUNCH_MODE: return "launchMode";
             case ANDROID_ATTR_SCREEN_ORIENTATION: return "screenOrientation";
             case ANDROID_ATTR_CONFIG_CHANGES: return "configChanges";
+            case ANDROID_ATTR_ACCESSIBILITY_EVENT_TYPES: return "accessibilityEventTypes";
+            case ANDROID_ATTR_ACCESSIBILITY_FEEDBACK_TYPE: return "accessibilityFeedbackType";
             case ANDROID_ATTR_RESOURCE: return "resource";
             case ANDROID_ATTR_MIN_SDK: return "minSdkVersion";
             case ANDROID_ATTR_VERSION_CODE: return "versionCode";

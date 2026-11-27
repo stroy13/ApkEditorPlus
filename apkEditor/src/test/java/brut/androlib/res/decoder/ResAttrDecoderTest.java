@@ -19,6 +19,8 @@ public class ResAttrDecoderTest {
     private static final int CONFIG_CHANGES = ANDROID | 0x0001001f;
     private static final int LAUNCH_MODE = ANDROID | 0x0001001d;
     private static final int SCREEN_ORIENTATION = ANDROID | 0x0001001e;
+    private static final int ACCESSIBILITY_EVENT_TYPES = ANDROID | 0x00010380;
+    private static final int ACCESSIBILITY_FEEDBACK_TYPE = ANDROID | 0x00010382;
     private static final int WINDOW_SOFT_INPUT_MODE = ANDROID | 0x0001022b;
     private static final int FOREGROUND_SERVICE_TYPE = ANDROID | 0x00010599;
     private static final int ENABLE_ON_BACK_INVOKED_CALLBACK = ANDROID | 0x0001066c;
@@ -57,6 +59,41 @@ public class ResAttrDecoderTest {
         assertEquals("fileManagement|mediaProcessing|specialUse",
                 decoder.decode(TypedValue.TYPE_STRING, 0, "0x40003000",
                         FOREGROUND_SERVICE_TYPE, "foregroundServiceType"));
+    }
+
+    @Test
+    public void decodesAccessibilityFlagsIncludingEmptyAndModernMasks() throws Exception {
+        ResAttrDecoder decoder = new ResAttrDecoder();
+
+        // Zero means an empty mask. It must not fall through to the scalar
+        // encoder, whose 0x0 spelling is rejected by aapt2 for flags attrs.
+        assertEquals("@null", decoder.decode(TypedValue.TYPE_INT_HEX, 0, null,
+                ACCESSIBILITY_EVENT_TYPES, "accessibilityEventTypes"));
+        assertEquals("@null", decoder.decode(TypedValue.TYPE_STRING, 0, "0x0",
+                ACCESSIBILITY_FEEDBACK_TYPE, "accessibilityFeedbackType"));
+
+        assertEquals("typeViewClicked|typeViewFocused|typeWindowContentChanged",
+                decoder.decode(TypedValue.TYPE_INT_HEX,
+                        0x00000809, null, ACCESSIBILITY_EVENT_TYPES,
+                        "accessibilityEventTypes"));
+        assertEquals("typeGestureDetectionStart|typeTouchInteractionStart|"
+                        + "typeContextClicked|typeAssistReadingContext|typeSpeechStateChange",
+                decoder.decode(TypedValue.TYPE_INT_HEX,
+                        0x03940000, null, ACCESSIBILITY_EVENT_TYPES,
+                        "accessibilityEventTypes"));
+        assertEquals("typeAllMask", decoder.decode(TypedValue.TYPE_INT_HEX, -1, null,
+                ACCESSIBILITY_EVENT_TYPES, "accessibilityEventTypes"));
+
+        assertEquals("feedbackHaptic|feedbackVisual|feedbackGeneric",
+                decoder.decode(TypedValue.TYPE_INT_HEX, 0x1a, null,
+                        ACCESSIBILITY_FEEDBACK_TYPE, "accessibilityFeedbackType"));
+        assertEquals("feedbackAllMask", decoder.decode(TypedValue.TYPE_INT_HEX, -1, null,
+                ACCESSIBILITY_FEEDBACK_TYPE, "accessibilityFeedbackType"));
+
+        // The special empty-mask handling is scoped to the two framework attrs;
+        // an unrelated scalar still follows the existing fallback path.
+        assertEquals("0x0", decoder.decode(TypedValue.TYPE_STRING, 0, "0x0", 0,
+                "unmappedAttribute"));
     }
 
     @Test
