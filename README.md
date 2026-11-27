@@ -1,10 +1,10 @@
-# APK Editor Plus v1.10.0.277
+# APK Editor Plus v1.10.0.278
 
 [![Сборка](https://github.com/stroy13/test_mod/actions/workflows/build.yml/badge.svg)](https://github.com/stroy13/test_mod/actions/workflows/build.yml)
 
 Полноценный форк Android-приложения **APK Editor Plus** (`ru.apkeditor.plus`)
 с собственными исправлениями и развитием кодовой базы. Актуальная версия —
-**277** / **1.10.0.277**, история изменений — в [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
+**278** / **1.10.0.278**, история изменений — в [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
 Проект собирается штатным Gradle: `:apkEditorPlus:assembleDebug` →
 `apkEditorPlus/build/outputs/apk/debug/apkEditorPlus-debug.apk`.
@@ -15,7 +15,7 @@
 | Параметр | Значение |
 |---|---|
 | Package / applicationId | `ru.apkeditor.plus` |
-| versionCode / versionName | `277` / `1.10.0.277` (см. [`docs/CHANGELOG.md`](docs/CHANGELOG.md)) |
+| versionCode / versionName | `278` / `1.10.0.278` (см. [`docs/CHANGELOG.md`](docs/CHANGELOG.md)) |
 | minSdk / targetSdk / compileSdk | 26 / 37 / 37 |
 | Gradle / AGP | 9.8.2 / 9.5.1 |
 | JDK | 17 |
@@ -50,6 +50,9 @@
 намеренно.
 
 ## Сборка
+
+Перед каждой новой сборкой обязательно поднимайте `versionCode` и синхронный
+`versionName`; полный чек-лист сохранён в [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md).
 
 1. Установить JDK 17, Android SDK platform 37 + build-tools 37.0.0,
    NDK 30.0.16248370.
