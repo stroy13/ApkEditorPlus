@@ -34,6 +34,8 @@ public class ComparisonScreenRegressionTest {
         assertTrue("the mode listener must exist", listener >= 0);
         assertTrue("the initial status/filter state must not depend on Spinner callbacks",
                 initialRefresh > listener);
+        assertTrue("swap must be disabled until both sides are selected",
+                src.contains("this.swap.setEnabled(this.left != null && this.right != null);"));
     }
 
     @Test
@@ -46,6 +48,9 @@ public class ComparisonScreenRegressionTest {
         assertTrue(src.contains("new ForegroundColorSpan(localColor)"));
         assertTrue(src.contains("new StyleSpan(Typeface.ITALIC)"));
         assertTrue(src.contains("SpannableStringBuilder display"));
+        assertTrue(src.contains("isSmaliEntry(entry.name)"));
+        assertTrue(src.contains("new ColorTheme(this.activity, \"smali.xml\")"));
+        assertTrue(src.contains("SmaliSyntax.tokenize(line)"));
     }
 
     @Test
@@ -56,5 +61,7 @@ public class ComparisonScreenRegressionTest {
         assertTrue(src.contains("emptyIfMissing("));
         assertTrue(src.contains("ComparisonCore.openInput(selected, entry, true)"));
         assertTrue(src.contains("new BinaryDiffDialog(this, entry.name, binary, changes).dialog()"));
+        String binary = read("apkEditor/src/main/java/com/gmail/heagoo/apkeditor/BinaryDiffDialog.java");
+        assertTrue(binary.contains("BinaryDiffHex.format(bytes[i])"));
     }
 }

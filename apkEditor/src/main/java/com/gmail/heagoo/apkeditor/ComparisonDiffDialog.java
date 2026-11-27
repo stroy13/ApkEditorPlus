@@ -29,6 +29,8 @@ import androidx.core.graphics.ColorUtils;
 import com.gmail.heagoo.apkeditor.ComparisonCore;
 import com.gmail.heagoo.apkeditor.ComparisonDiffDialog;
 import com.gmail.heagoo.apkeditor.base.R;
+import com.gmail.heagoo.neweditor.ColorTheme;
+import com.gmail.heagoo.neweditor.Token;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -40,7 +42,9 @@ public final class ComparisonDiffDialog {
     private CheckBox context;
     private final Dialog dialog;
     private final ComparisonCore.Diff diff;
+    private final boolean smaliSyntax;
     private final boolean xmlSyntax;
+    private ColorTheme smaliTheme;
     private ManifestEditorPalette xmlPalette;
     private final List<CharSequence> styledLeft = new ArrayList<>();
     private final List<CharSequence> styledRight = new ArrayList<>();
@@ -80,6 +84,7 @@ public final class ComparisonDiffDialog {
         this.activity = a;
         this.diff = d;
         this.xmlSyntax = isXmlEntry(entry.name);
+        this.smaliSyntax = isSmaliEntry(entry.name);
         this.rows.addAll(d.rows);
         for (ComparisonCore.Row r : d.rows) {
             this.longest = Math.max(this.longest, Math.max(r.left.length(), r.right.length()));
@@ -301,6 +306,10 @@ public final class ComparisonDiffDialog {
                 || lower.equals("androidmanifest");
     }
 
+    private static boolean isSmaliEntry(String name) {
+        return name != null && name.toLowerCase(Locale.ROOT).endsWith(".smali");
+    }
+
     private ManifestEditorPalette palette() {
         TypedValue surface = new TypedValue();
         boolean dark = true;
@@ -340,19 +349,40 @@ public final class ComparisonDiffDialog {
         return result;
     }
 
+    private CharSequence highlightSmaliLine(String line) {
+        SpannableString result = new SpannableString(line);
+        for (SmaliSyntax.Span span : SmaliSyntax.tokenize(line)) {
+            if (span.start < 0 || span.end > result.length() || span.end <= span.start) {
+                continue;
+            }
+            Token token = new Token((byte) span.token, span.start, span.end - span.start, null);
+            result.setSpan(new ForegroundColorSpan(this.smaliTheme.getForegroundColor(token)),
+                    span.start, span.end, 33);
+        }
+        return result;
+    }
+
     private void refreshSyntax() {
         this.styledLeft.clear();
         this.styledRight.clear();
-        if (!this.xmlSyntax) {
+        if (!this.xmlSyntax && !this.smaliSyntax) {
             return;
         }
-        ManifestEditorPalette colors = palette();
-        this.xmlPalette = colors;
-        ManifestSyntax.State leftState = new ManifestSyntax.State();
-        ManifestSyntax.State rightState = new ManifestSyntax.State();
-        for (ComparisonCore.Row row : this.rows) {
-            this.styledLeft.add(highlightXmlLine(row.left, leftState, colors));
-            this.styledRight.add(highlightXmlLine(row.right, rightState, colors));
+        if (this.xmlSyntax) {
+            ManifestEditorPalette colors = palette();
+            this.xmlPalette = colors;
+            ManifestSyntax.State leftState = new ManifestSyntax.State();
+            ManifestSyntax.State rightState = new ManifestSyntax.State();
+            for (ComparisonCore.Row row : this.rows) {
+                this.styledLeft.add(highlightXmlLine(row.left, leftState, colors));
+                this.styledRight.add(highlightXmlLine(row.right, rightState, colors));
+            }
+        } else {
+            this.smaliTheme = new ColorTheme(this.activity, "smali.xml");
+            for (ComparisonCore.Row row : this.rows) {
+                this.styledLeft.add(highlightSmaliLine(row.left));
+                this.styledRight.add(highlightSmaliLine(row.right));
+            }
         }
     }
 
@@ -449,12 +479,14 @@ public final class ComparisonDiffDialog {
                     t.setEllipsize(null);
                     if (ComparisonDiffDialog.this.xmlSyntax) {
                         t.setTextColor(ComparisonDiffDialog.this.xmlPalette.text);
+                    } else if (ComparisonDiffDialog.this.smaliSyntax) {
+                        t.setTextColor(ComparisonDiffDialog.this.smaliTheme.getForeground());
                     }
                     t.setHeight(t.getPaint().getFontMetricsInt(null) + ComparisonDiffDialog.this.dp(6.0f));
                     ComparisonCore.Row row = (ComparisonCore.Row) ComparisonDiffDialog.this.rows.get(p);
                     int number = Pane.this.side == 0 ? row.leftNumber : row.rightNumber;
                     String text = Pane.this.side == 0 ? row.left : row.right;
-                    if (ComparisonDiffDialog.this.xmlSyntax
+                    if ((ComparisonDiffDialog.this.xmlSyntax || ComparisonDiffDialog.this.smaliSyntax)
                             && p < ComparisonDiffDialog.this.styledLeft.size()) {
                         CharSequence styled = Pane.this.side == 0
                                 ? ComparisonDiffDialog.this.styledLeft.get(p)
