@@ -192,7 +192,7 @@ public final class SmaliSyntax {
             return true;
         }
         char previous = text.charAt(index - 1);
-        return Character.isWhitespace(previous) || "{[(,=;)]".indexOf(previous) >= 0;
+        return Character.isWhitespace(previous) || "{[(,=;:)]".indexOf(previous) >= 0;
     }
 
     private static boolean isDescriptorBoundary(String text, int index) {

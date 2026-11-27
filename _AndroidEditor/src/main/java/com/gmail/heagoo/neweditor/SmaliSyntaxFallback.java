@@ -209,7 +209,7 @@ final class SmaliSyntaxFallback {
             return true;
         }
         char previous = text.charAt(index - 1);
-        return Character.isWhitespace(previous) || "{[(,=;)]".indexOf(previous) >= 0;
+        return Character.isWhitespace(previous) || "{[(,=;:)]".indexOf(previous) >= 0;
     }
 
     private static boolean descriptorBoundary(String text, int index) {

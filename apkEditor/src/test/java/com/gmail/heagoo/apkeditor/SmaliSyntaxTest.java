@@ -32,6 +32,8 @@ public class SmaliSyntaxTest {
                 SmaliSyntax.DIGIT, "0x7f", "    const/4 v0, 0x7f");
         assertHas(SmaliSyntax.tokenize("    const-string v0, \"hello\""),
                 SmaliSyntax.STRING, "\"hello\"", "    const-string v0, \"hello\"");
+        assertHas(SmaliSyntax.tokenize("    .field value:Lcom/example/Thing;"),
+                SmaliSyntax.DESCRIPTOR, "Lcom/example/Thing;", "    .field value:Lcom/example/Thing;");
     }
 
     private static void assertHas(List<SmaliSyntax.Span> spans, int token, String value, String line) {
