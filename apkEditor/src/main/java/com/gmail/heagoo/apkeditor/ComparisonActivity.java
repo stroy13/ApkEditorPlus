@@ -128,9 +128,15 @@ public final class ComparisonActivity extends ThemedActivity implements FileSele
         help.setText("?");
         help.setMinWidth(0);
         help.setMinimumWidth(0);
-        actions.addView(this.go, new LinearLayout.LayoutParams(0, -2, 1.0f));
-        actions.addView(this.swap, new LinearLayout.LayoutParams(dp(112.0f), -2));
-        actions.addView(help, new LinearLayout.LayoutParams(dp(48.0f), -2));
+        int actionGap = dp(4.0f);
+        LinearLayout.LayoutParams compareParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
+        compareParams.setMargins(0, 0, actionGap, 0);
+        LinearLayout.LayoutParams swapParams = new LinearLayout.LayoutParams(dp(112.0f), -2);
+        swapParams.setMargins(0, 0, actionGap, 0);
+        LinearLayout.LayoutParams helpParams = new LinearLayout.LayoutParams(dp(48.0f), -2);
+        actions.addView(this.go, compareParams);
+        actions.addView(this.swap, swapParams);
+        actions.addView(help, helpParams);
         linearLayout.addView(actions);
         this.summary = new TextView(this);
         this.summary.setTextSize(12.0f);

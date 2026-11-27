@@ -118,9 +118,14 @@ public final class SyntaxSnapshot {
                 }
             }
             lines.add(new Line(start, end, spans));
-            if (next < 0 && (start = next + 1) <= n) {
-                str = text;
-            } else {
+            if (next < 0) {
+                return new SyntaxSnapshot(lines, n);
+            }
+            // Continue after the newline. Keep an empty final line when the
+            // document ends with a newline so line numbers and spans stay
+            // aligned with the editor buffer.
+            start = next + 1;
+            if (start > n) {
                 return new SyntaxSnapshot(lines, n);
             }
         }

@@ -36,6 +36,10 @@ public class ComparisonScreenRegressionTest {
                 initialRefresh > listener);
         assertTrue("swap must be disabled until both sides are selected",
                 src.contains("this.swap.setEnabled(this.left != null && this.right != null);"));
+        assertTrue("action buttons need a gap so their rounded lower borders are not overdrawn",
+                src.contains("int actionGap = dp(4.0f);"));
+        assertTrue(src.contains("compareParams.setMargins(0, 0, actionGap, 0);"));
+        assertTrue(src.contains("swapParams.setMargins(0, 0, actionGap, 0);"));
     }
 
     @Test
